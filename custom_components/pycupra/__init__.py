@@ -34,16 +34,16 @@ from homeassistant.components.persistent_notification import async_create as asy
 from pycupra.connection import Connection
 from pycupra.vehicle import Vehicle
 from pycupra.exceptions import (
-    SeatConfigException,
-    SeatAuthenticationException,
-    SeatAccountLockedException,
-    SeatTokenExpiredException,
-    SeatException,
-    SeatEULAException,
-    SeatThrottledException,
-    SeatLoginFailedException,
-    SeatInvalidRequestException,
-    SeatRequestInProgressException
+    PyCupraConfigException,
+    PyCupraAuthenticationException,
+    PyCupraAccountLockedException,
+    PyCupraTokenExpiredException,
+    PyCupraException,
+    PyCupraEULAException,
+    PyCupraThrottledException,
+    PyCupraLoginFailedException,
+    PyCupraInvalidRequestException,
+    PyCupraRequestInProgressException
 )
 
 from .const import (
@@ -220,7 +220,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             #    data=entry,
             #)
             return False
-    except (SeatAuthenticationException, SeatAccountLockedException, SeatLoginFailedException) as e:
+    except (PyCupraAuthenticationException, PyCupraAccountLockedException, PyCupraLoginFailedException) as e:
         raise ConfigEntryAuthFailed(e) from e
     except Exception as e:
         raise ConfigEntryNotReady(e) from e
@@ -345,7 +345,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             dev_coordinator = hass.data[DOMAIN][conf_entry]['data'].coordinator
         except:
-            raise SeatConfigException('Could not find associated coordinator for given vehicle')
+            raise PyCupraConfigException('Could not find associated coordinator for given vehicle')
 
         # Return with associated Vehicle class object
         return dev_coordinator.connection.vehicle(vin)
@@ -364,7 +364,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise SeatInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
             if service_call.data.get("off_peak_start", False):
                 try:
                     peakstart = service_call.data.get("off_peak_start").strftime("%H:%M")
@@ -372,7 +372,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get("off_peak_start", "")):
                         peakstart = service_call.data.get("off_peak_start", "00:00")
                     else:
-                        raise SeatInvalidRequestException(f"Invalid value for off peak start hours: {service_call.data.get('off_peak_start')}")
+                        raise PyCupraInvalidRequestException(f"Invalid value for off peak start hours: {service_call.data.get('off_peak_start')}")
             if service_call.data.get("off_peak_end", False):
                 try:
                     peakend = service_call.data.get("off_peak_end").strftime("%H:%M")
@@ -380,7 +380,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get("off_peak_end", "")):
                         peakend = service_call.data.get("off_peak_end", "00:00")
                     else:
-                        raise SeatInvalidRequestException(f"Invalid value for off peak end hours: {service_call.data.get('off_peak_end')}")
+                        raise PyCupraInvalidRequestException(f"Invalid value for off peak end hours: {service_call.data.get('off_peak_end')}")
 
             # Convert to parseable data
             schedule = {
@@ -418,7 +418,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_schedule', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -428,7 +428,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_schedule' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_schedule' failed {e}")
         except Exception as e:
             raise
@@ -447,7 +447,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise SeatInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
 
             # Convert to parseable data
             schedule = {
@@ -466,7 +466,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_departure_profile', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -476,7 +476,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_departure_profile_schedule' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_departure_profile_schedule' failed {e}")
         except Exception as e:
             raise
@@ -495,7 +495,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise SeatInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
 
             # Convert to parseable data
             schedule = {
@@ -514,7 +514,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_climatisation_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -524,7 +524,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_climatisation_timer_schedule' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_climatisation_timer_schedule' failed {e}")
         except Exception as e:
             raise
@@ -543,7 +543,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise SeatInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
 
             # Convert to parseable data
             schedule = {
@@ -562,7 +562,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_auxiliary_heating_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -577,7 +577,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_auxiliary_heating_timer_schedule' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_auxiliary_heating_timer_schedule' failed {e}")
         except Exception as e:
             raise
@@ -616,7 +616,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'send_destination', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -625,7 +625,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.debug(f"Service call 'send_destination' executed without error")
             else:
                 _LOGGER.warning(f"Failed to execute service call 'send_destination' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'send_destination' failed {e}")
         except Exception as e:
             raise
@@ -638,7 +638,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_charge_limit', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -649,7 +649,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_charge_limit' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_charge_limit' failed {e}")
         except Exception as e:
             raise
@@ -662,7 +662,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_current', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -673,7 +673,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_current' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_current' failed {e}")
         except Exception as e:
             raise
@@ -686,7 +686,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_target_soc', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -697,7 +697,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_target_soc' with data '{service_call}'")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_target_soc' failed {e}")
         except Exception as e:
             raise
@@ -710,14 +710,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_pheater_duration', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
             car.pheater_duration = service_call.data.get("duration", car.pheater_duration)
             _LOGGER.debug(f"Service call 'set_pheater_duration' executed without error")
             await coordinator.async_request_refresh()
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_pheater_duration' failed {e}")
         except Exception as e:
             raise
@@ -730,7 +730,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
-                #raise SeatException(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
+                #raise PyCupraException(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_climater', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -778,7 +778,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         _LOGGER.warning(f"Failed to execute service call 'set_climater' with data '{service_call}'")
             else:
                 _LOGGER.warning(f"Service call 'set_climater' without valid action parameter")
-        except (SeatInvalidRequestException) as e:
+        except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_climater' failed {e}")
         except Exception as e:
             raise
@@ -1219,7 +1219,7 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             # Get associated vehicles before we continue
             await self.connection.get_vehicles()
             return True
-        except (SeatAccountLockedException, SeatAuthenticationException) as e:
+        except (PyCupraAccountLockedException, PyCupraAuthenticationException) as e:
             # Raise auth failed error in config flow
             raise ConfigEntryAuthFailed(e) from e
         except:
