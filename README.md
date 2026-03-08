@@ -17,6 +17,7 @@ The car privacy settings must be set to "Share my position" for full functionali
 - Charging cable connected
 - Charging cable locked
 - Charging state, charging power, charging rate and charging time left
+- Charging mode, charging preferred mode, charging profile defined
 - Battery level
 - Electric range
 - Start/stop charging
@@ -28,6 +29,7 @@ The car privacy settings must be set to "Share my position" for full functionali
 - Lock, windows, trunk, hood, sunroof and door status
 - Lock and unlock car
 - Last trip info and last cycle info (last trip = summary of last day, the vehicle was used, last cycle = summary of last month, the vehicle was used)
+- Vehicle online status
 - Information about status and settings of climatisation and auxiliary heating
 - Start/stop Electric climatisation, window_heater
 - Start/stop auxiliary heating
@@ -51,7 +53,7 @@ The model images of the vehicle are downloaded from the Cupra/Seat cloud and sto
 You can use these image files for your HA dashboard (e.g. as image for a picture card). Just add the prefix '/local/pycupra' to the file name above and use this as the *image path*. A cropped image of the front view is used as the icon of the vehicle on the Home Assistant map
 
 ### How to use the driving data sum files
-- In the pycupra_data folder (should normally be as subfolder of the config folder of HA), you find the files <VIN>_drivingData_dailySums.csv and <VIN>VSSZZZKLXRR008610_drivingData_monthlySums.csv (and an .old file for both of them). PyCupra uses these two files, to provide you with a history of the driving data. You can copy those files for further data analysis to another location, but do not delete these files from the pycupra_data folder and do not edit these files accidently.
+- In the pycupra_data folder (should normally be as subfolder of the config folder of HA), you find the files <VIN>_drivingData_dailySums.csv and <VIN>_drivingData_monthlySums.csv (and an .old file for both of them). PyCupra uses these two files, to provide you with a history of the driving data. You can copy those files for further data analysis to another location, but do not delete these files from the pycupra_data folder and do not edit these files accidently.
 
 ## Installation
 
