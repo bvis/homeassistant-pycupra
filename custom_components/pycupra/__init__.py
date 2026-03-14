@@ -37,13 +37,13 @@ from pycupra.exceptions import (
     PyCupraConfigException,
     PyCupraAuthenticationException,
     PyCupraAccountLockedException,
-    PyCupraTokenExpiredException,
-    PyCupraException,
-    PyCupraEULAException,
-    PyCupraThrottledException,
+    #PyCupraTokenExpiredException,
+    #PyCupraException,
+    #PyCupraEULAException,
+    #PyCupraThrottledException,
     PyCupraLoginFailedException,
     PyCupraInvalidRequestException,
-    PyCupraRequestInProgressException
+    #PyCupraRequestInProgressException
 )
 
 from .const import (
@@ -63,8 +63,8 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     SIGNAL_STATE_UPDATED,
-    UNDO_UPDATE_LISTENER, UPDATE_CALLBACK, CONF_DEBUG, DEFAULT_DEBUG, CONF_CONVERT, CONF_NO_CONVERSION,
-    CONF_IMPERIAL_UNITS,
+    UNDO_UPDATE_LISTENER, UPDATE_CALLBACK, CONF_DEBUG, DEFAULT_DEBUG, 
+    #CONF_CONVERT, CONF_NO_CONVERSION,CONF_IMPERIAL_UNITS,
     SERVICE_SET_SCHEDULE,
     SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE,
     SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE,
@@ -221,8 +221,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             #)
             return False
     except (PyCupraAuthenticationException, PyCupraAccountLockedException, PyCupraLoginFailedException) as e:
+        _LOGGER.debug(f"In async_setup_entry. Exception {e}")
         raise ConfigEntryAuthFailed(e) from e
     except Exception as e:
+        _LOGGER.debug(f"In async_setup_entry. Others exceptions. Exception {e}")
         raise ConfigEntryNotReady(e) from e
 
     entry.async_on_unload(
@@ -858,8 +860,10 @@ def update_callback(hass, coordinator):
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the component from configuration.yaml."""
     hass.data.setdefault(DOMAIN, {})
+    _LOGGER.debug("In __init.py.async_setup()")
 
     if hass.config_entries.async_entries(DOMAIN):
+        _LOGGER.debug("hass.config_entries.async_entries() = True")
         return True
 
     if DOMAIN in config:
@@ -928,7 +932,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry):
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-def get_convert_conf(entry: ConfigEntry):
+#def get_convert_conf(entry: ConfigEntry):
 #    return CONF_SCANDINAVIAN_MILES if entry.options.get(
 #        CONF_SCANDINAVIAN_MILES,
 #        entry.data.get(
@@ -936,7 +940,7 @@ def get_convert_conf(entry: ConfigEntry):
 #            False
 #        )
 #    ) else CONF_NO_CONVERSION
-    return CONF_NO_CONVERSION
+#    return CONF_NO_CONVERSION
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate configuration from old version to new."""
@@ -1105,7 +1109,7 @@ class PyCupraEntity(Entity):
         """Return extra state attributes."""
         attributes = dict(
             self.instrument.attributes,
-            model=f"{self.vehicle.model}/{self.vehicle.model_year}",
+            model=f"{self.vehicle.model}/{self.vehicle.model_year}" if (self.vehicle.model_year!='unknown') else f"{self.vehicle.model}",
         )
 
         # Return model image as picture attribute for position entity
@@ -1220,8 +1224,9 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             await self.connection.get_vehicles()
             return True
         except (PyCupraAccountLockedException, PyCupraAuthenticationException) as e:
+            _LOGGER.error('In async_login.except. Exception:', e)
             # Raise auth failed error in config flow
-            raise ConfigEntryAuthFailed(e) from e
+            raise # ConfigEntryAuthFailed(e) from e
         except:
             raise
 
@@ -1253,6 +1258,9 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         try:
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
+            if vehicle._haNotification != None:
+                async_show_pycupra_notification(self.hass, vehicle._haNotification, title="Request failed", id="PyCupra_request_failed")
+                vehicle.clearHANotification()
             if await vehicle.update(updateType):
                 dashboard = vehicle.dashboard(
                     mutable=self.entry.options.get(CONF_MUTABLE),
@@ -1310,9 +1318,10 @@ def async_show_pycupra_notification(hass: HomeAssistant, message, title=None, id
     global COUNTER_FOR_PERSISTENT_NOTIFICATIONS
     COUNTER_FOR_PERSISTENT_NOTIFICATIONS = COUNTER_FOR_PERSISTENT_NOTIFICATIONS +1
     if id:
-        hass.async_create_task(
-            async_sleep_and_dismiss_pycupra_notification(hass, id, COUNTER_FOR_PERSISTENT_NOTIFICATIONS)
-        )
+        if not ('failed' in id or 'error' in id):
+            hass.async_create_task(
+                async_sleep_and_dismiss_pycupra_notification(hass, id, COUNTER_FOR_PERSISTENT_NOTIFICATIONS)
+            )
 
 async def async_sleep_and_dismiss_pycupra_notification(hass: HomeAssistant, id, counter):
     """wait 2 minutes and then dismiss notification"""

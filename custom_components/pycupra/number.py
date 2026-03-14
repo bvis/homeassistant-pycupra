@@ -76,12 +76,22 @@ class PyCupraNumber(PyCupraEntity, NumberEntity):
         else:
             return STATE_UNKNOWN
 
+    @property
+    def native_unit_of_measurement(self):
+        if self.instrument.unit:
+            return self.instrument.unit
+        else:
+            return None
+
     async def async_set_native_value(self, value) -> None:
-        if value > self.native_min_value:
+        try:
             if self.instrument.mutable:
                 await self.instrument.set_value(int(value))
+                self.async_write_ha_state()
             else:
-                _LOGGER.warning(f"Not changing value of {self.instrument.attr}, because the option \'mutable\' is deactivated or the instrument is not changeable for your vehicle.")
-                #raise Exception(f"Not changing value of {self.instrument.attr}, because the option \'mutable\' is deactivated or the instrument is not changeable for your vehicle.")
-                async_show_pycupra_notification(self.hass, f"Not changing value of {self.instrument.attr}, because the option \'mutable\' is deactivated or the instrument is not changeable for your vehicle.", title="Option mutable deactivated", id="PyCupra_mutable")
-            self.async_write_ha_state()
+                _LOGGER.warning(f"Not changing value of '{self.instrument.attr}', because the option \'mutable\' is deactivated or the instrument is not changeable for your vehicle.")
+                async_show_pycupra_notification(self.hass, f"Not changing value of '{self.instrument.attr}', because the option \'mutable\' is deactivated or the instrument is not changeable for your vehicle.", title="Option mutable deactivated", id="PyCupra_mutable")
+        except Exception as e:
+            _LOGGER.error(f"An error occurred, while trying to change value of '{self.instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(self.hass, f"An error occurred, while trying to change value of '{self.instrument.attr}'. Error: {e}", title="Set number error", id="PyCupra_set_number_error")
+

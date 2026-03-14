@@ -13,14 +13,14 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from pycupra.connection import Connection
-from . import get_convert_conf
+#from . import get_convert_conf
 from .const import (
-    CONF_CONVERT,
+    #CONF_CONVERT,
     #CONF_SCANDINAVIAN_MILES,
     #CONF_IMPERIAL_UNITS,
-    CONF_NO_CONVERSION,
+    #CONF_NO_CONVERSION,
     CONF_DEBUG,
-    CONVERT_DICT,
+    #CONVERT_DICT,
     CONF_MUTABLE,
     CONF_BRAND,
     CONF_SPIN,
@@ -90,7 +90,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 password=self._data[CONF_PASSWORD],
                 fulldebug=False,
                 nightlyUpdateReduction= False,
-                hass=self.hass
+                hass= self.hass,
             )
 
             return await self.async_step_login()
@@ -274,27 +274,27 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(self, entry) -> dict:
         """Handle initiation of re-authentication with My Cupra."""
+        #_LOGGER.debug(f"In async_step_reauth. entry={entry}")
         self.entry = entry
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(self, user_input: dict = None) -> dict:
         """Handle re-authentication with My Cupra."""
         errors: dict = {}
+        #_LOGGER.debug(f"In async_step_reauth_confirm. user_input={user_input}")
+        #_LOGGER.debug(f"In async_step_reauth_confirm. self.entry={self.entry}")
 
         if user_input is not None:
             _LOGGER.debug("Creating connection to My Cupra")
-            logPrefix=self.entry.options.get(CONF_LOGPREFIX, self.entry.data.get(CONF_LOGPREFIX, None))
-            if logPrefix=='' or logPrefix==' ':
-                logPrefix=None
             self._connection = Connection(
                 session=async_get_clientsession(self.hass),
                 brand=user_input[CONF_BRAND],
                 username=user_input[CONF_USERNAME],
                 password=user_input[CONF_PASSWORD],
-                fulldebug=self.entry.options.get(CONF_DEBUG, self.entry.data.get(CONF_DEBUG, DEFAULT_DEBUG)),
-                nightlyUpdateReduction=self.entry.options.get(CONF_NIGHTLY_UPDATE_REDUCTION, self.entry.data.get(CONF_NIGHTLY_UPDATE_REDUCTION, False)),
-                logPrefix=logPrefix,
-                hass=self.hass
+                fulldebug=False, 
+                nightlyUpdateReduction=False, 
+                logPrefix=None,
+                hass= self.hass,
             )
 
             # noinspection PyBroadException
@@ -304,33 +304,23 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.debug("Unable to login to Cupra/Seat portal. Need to accept a new EULA/T&C? Try logging in to the portal: https://my.seat/portal/")
                     errors["base"] = "cannot_connect"
                 else:
-                    data = self.entry.data.copy()
-                    self.hass.config_entries.async_update_entry(
-                        self.entry,
-                        data={
-                            **data,
-                            CONF_BRAND: user_input[CONF_BRAND],
-                            CONF_USERNAME: user_input[CONF_USERNAME],
-                            CONF_PASSWORD: user_input[CONF_PASSWORD],
-                        },
+                    return self.async_update_reload_and_abort(
+                        self._get_reauth_entry(),
+                        data_updates=user_input,
                     )
-                    self.hass.async_create_task(
-                        self.hass.config_entries.async_reload(self.entry.entry_id)
-                    )
-
-                    return self.async_abort(reason="reauth_successful")
             except Exception as e:
                 _LOGGER.error("Failed to login due to error: %s", str(e))
                 return self.async_abort(reason="Failed to connect to Connect")
 
+        #_LOGGER.debug(f"In async_step_reauth_confirm before returning show_form(). self.entry={self.entry}")
         brand_values = ["cupra", "seat"]
         return self.async_show_form(
             step_id="reauth_confirm",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONF_BRAND, default=brand_values[0]): vol.In(brand_values),
-                    vol.Required(CONF_USERNAME, default=self.entry.data[CONF_USERNAME]): str,
-                    vol.Required(CONF_PASSWORD): str,
+                    vol.Required(CONF_USERNAME, default=self.entry[CONF_USERNAME]): cv.string,
+                    vol.Required(CONF_PASSWORD): cv.string,
                 }
             ),
             errors=errors,
@@ -347,7 +337,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_VEHICLE: None
         }
         self._options = {
-            CONF_CONVERT: CONF_NO_CONVERSION,
+            #CONF_CONVERT: CONF_NO_CONVERSION,
             CONF_MUTABLE: True,
             CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
             CONF_DEBUG: False,
@@ -399,7 +389,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             fulldebug=False,
             nightlyUpdateReduction=False,
             logPrefix=None,
-            hass=self.hass
+            hass= self.hass,
         )
         try:
             #await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH)

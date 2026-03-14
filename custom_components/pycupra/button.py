@@ -67,6 +67,10 @@ class PyCupraButton(PyCupraEntity, ButtonEntity):
             return
 
         _LOGGER.debug(f"Button {self.instrument.attr} was pressed. Calling the press() method")
-        await instrument.press()
-        self.async_write_ha_state()
+        try:
+            await instrument.press()
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"An error occurred, while trying to press '{instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(self.hass, f"An error occurred, while trying to press '{instrument.attr}'. Error: {e}", title="Press button error", id="PyCupra_press_button_error")
 

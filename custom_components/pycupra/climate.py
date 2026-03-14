@@ -98,25 +98,33 @@ class PyCupraClimate(PyCupraEntity, ClimateEntity):
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperatures."""
-        temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature:
-            if self.instrument.mutable:
-                await self.instrument.set_temperature(temperature)
-            else:
-                _LOGGER.warning(f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.")
-                #raise Exception(f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(self.hass, f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
-            self.async_write_ha_state()
+        try:
+            temperature = kwargs.get(ATTR_TEMPERATURE)
+            if temperature:
+                if self.instrument.mutable:
+                    await self.instrument.set_temperature(temperature)
+                else:
+                    _LOGGER.warning(f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.")
+                    #raise Exception(f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.")
+                    async_show_pycupra_notification(self.hass, f"Not changing temperature of {self.instrument.attr}, because the option \'mutable\' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+                self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"An error occurred, while trying to set temperature of '{self.instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(self.hass, f"An error occurred, while trying to set temperature of '{self.instrument.attr}'. Error: {e}", title="Set climate error", id="PyCupra_set_climate_error")
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target hvac mode."""
-        if self.instrument.mutable:
-            if hvac_mode == HVACMode.OFF:
-                await self.instrument.set_hvac_mode(False)
-            elif hvac_mode == HVACMode.HEAT_COOL:
-                await self.instrument.set_hvac_mode(True)
-        else:
-            _LOGGER.warning(f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.")
-            #raise Exception(f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.")
-            async_show_pycupra_notification(self.hass, f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
-        self.async_write_ha_state()
+        try:
+            if self.instrument.mutable:
+                if hvac_mode == HVACMode.OFF:
+                    await self.instrument.set_hvac_mode(False)
+                elif hvac_mode == HVACMode.HEAT_COOL:
+                    await self.instrument.set_hvac_mode(True)
+            else:
+                _LOGGER.warning(f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.")
+                #raise Exception(f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.")
+                async_show_pycupra_notification(self.hass, f"Not switching {self.instrument.attr}, because the option \'mutable\' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"An error occurred, while trying to set switch '{self.instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(self.hass, f"An error occurred, while trying to switch '{self.instrument.attr}'. Error: {e}", title="Set climate error", id="PyCupra_set_climate_error")
