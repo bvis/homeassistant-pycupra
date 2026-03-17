@@ -71,7 +71,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             # Set default options
             self._options = {
-                CONF_CONVERT: CONF_NO_CONVERSION,
+                #CONF_CONVERT: CONF_NO_CONVERSION,
                 CONF_MUTABLE: True,
                 CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL,
                 CONF_DEBUG: False,

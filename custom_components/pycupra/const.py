@@ -8,16 +8,17 @@ DEFAULT_DEBUG = False
 CONF_MUTABLE = "mutable"
 CONF_BRAND = "brand"
 CONF_SPIN = "spin"
-CONF_SCANDINAVIAN_MILES = "scandinavian_miles"
-CONF_IMPERIAL_UNITS = "imperial_units"
-CONF_NO_CONVERSION = "no_conversion"
-CONF_CONVERT = "convert"
+#CONF_SCANDINAVIAN_MILES = "scandinavian_miles"
+#CONF_IMPERIAL_UNITS = "imperial_units"
+#CONF_NO_CONVERSION = "no_conversion"
+#CONF_CONVERT = "convert"
 CONF_VEHICLE = "vehicle"
 CONF_INSTRUMENTS = "instruments"
 CONF_DEBUG = "debug"
 CONF_NIGHTLY_UPDATE_REDUCTION = "nightly_update_reduction"
 CONF_FIREBASE = "use_push_notifications"
 CONF_LOGPREFIX= "log_prefix"
+CONF_EUDA = "use_euda_files"
 
 # Service definitions
 SERVICE_SET_SCHEDULE = "set_departure_schedule"
@@ -40,11 +41,11 @@ SIGNAL_STATE_UPDATED = f"{DOMAIN}.updated"
 MIN_SCAN_INTERVAL = 120
 DEFAULT_SCAN_INTERVAL = 600
 
-CONVERT_DICT = {
-    CONF_NO_CONVERSION: "No conversion",
-    CONF_IMPERIAL_UNITS: "Imperial units",
-    CONF_SCANDINAVIAN_MILES: "km to mil",
-}
+#CONVERT_DICT = {
+#    CONF_NO_CONVERSION: "No conversion",
+#    CONF_IMPERIAL_UNITS: "Imperial units",
+#    CONF_SCANDINAVIAN_MILES: "km to mil",
+#}
 
 PLATFORMS = {
     "sensor": "sensor",
