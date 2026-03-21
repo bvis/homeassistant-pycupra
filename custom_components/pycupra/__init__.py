@@ -33,30 +33,27 @@ from homeassistant.components.persistent_notification import async_create as asy
 
 from pycupra.connection import Connection
 from pycupra.vehicle import Vehicle
+from pycupra.eudaconnection import EUDAConnection
+from pycupra.eudavehicle import EUDAVehicle
 from pycupra.exceptions import (
     PyCupraConfigException,
     PyCupraAuthenticationException,
     PyCupraAccountLockedException,
-    #PyCupraTokenExpiredException,
-    #PyCupraException,
-    #PyCupraEULAException,
-    #PyCupraThrottledException,
     PyCupraLoginFailedException,
     PyCupraInvalidRequestException,
-    #PyCupraRequestInProgressException
 )
 
 from .const import (
     PLATFORMS,
     CONF_BRAND,
     CONF_MUTABLE,
-    #CONF_SCANDINAVIAN_MILES,
     CONF_SPIN,
     CONF_VEHICLE,
     CONF_INSTRUMENTS,
     CONF_NIGHTLY_UPDATE_REDUCTION,
     CONF_FIREBASE,
     CONF_LOGPREFIX,
+    CONF_EUDA,
     DATA,
     DATA_KEY,
     MIN_SCAN_INTERVAL,
@@ -64,7 +61,6 @@ from .const import (
     DOMAIN,
     SIGNAL_STATE_UPDATED,
     UNDO_UPDATE_LISTENER, UPDATE_CALLBACK, CONF_DEBUG, DEFAULT_DEBUG, 
-    #CONF_CONVERT, CONF_NO_CONVERSION,CONF_IMPERIAL_UNITS,
     SERVICE_SET_SCHEDULE,
     SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE,
     SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE,
@@ -200,6 +196,7 @@ COUNTER_FOR_PERSISTENT_NOTIFICATIONS=0
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Setup PyCupra component from a config entry."""
+    _LOGGER.debug(f"In async_setup_entry.")
     hass.data.setdefault(DOMAIN, {})
 
     if entry.options.get(CONF_SCAN_INTERVAL):
@@ -213,12 +210,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         if not await coordinator.async_login():
-            self.entry.async_start_reauth(self.hass)
-            #await hass.config_entries.flow.async_init(
-            #    DOMAIN,
-            #    context={"source": SOURCE_REAUTH},
-            #    data=entry,
-            #)
+            _LOGGER.debug(f"In async_setup_entry. async_login failed.")
+            entry.async_start_reauth(hass)
             return False
     except (PyCupraAuthenticationException, PyCupraAccountLockedException, PyCupraLoginFailedException) as e:
         _LOGGER.debug(f"In async_setup_entry. Exception {e}")
@@ -250,8 +243,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     conf_instruments = entry.data.get(CONF_INSTRUMENTS, {}).copy()
     if entry.options.get(CONF_DEBUG, False) is True:
-        _LOGGER.debug(f"Configured data: {async_redact_data(entry.data, ['username', 'password', 'vehicle', 'spin'])}") 
-        _LOGGER.debug(f"Configured options: {async_redact_data(entry.options, ['username', 'password', 'vehicle', 'spin'])}") 
+        #_LOGGER.debug(f"Configured data: {async_redact_data(entry.data, ['username', 'password', 'vehicle', 'spin'])}") 
+        #_LOGGER.debug(f"Configured options: {async_redact_data(entry.options, ['username', 'password', 'vehicle', 'spin'])}") 
         _LOGGER.debug(f"Resources from options are: {entry.options.get(CONF_RESOURCES, [])}")
         _LOGGER.debug(f"All instruments (data): {conf_instruments}")
     new_instruments = {}
@@ -317,10 +310,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for component in components:
         coordinator.platforms.append(component)
-        #await hass.config_entries.async_forward_entry_setups(entry, [component])
-        #hass.async_create_task(
-        #    hass.config_entries.async_forward_entry_setups(entry, [component])
-        #)
     hass.async_create_task(
         hass.config_entries.async_forward_entry_setups(entry, components)
     )
@@ -420,7 +409,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_schedule', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -468,7 +456,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_departure_profile', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -516,7 +503,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_climatisation_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -564,7 +550,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_auxiliary_heating_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -618,7 +603,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'send_destination', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -640,7 +624,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_charge_limit', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -664,7 +647,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_current', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -688,7 +670,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_target_soc', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -712,7 +693,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_pheater_duration', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -732,7 +712,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # If option 'mutable' is deactivated, then this action shall not be performed
             if not car._dashboard._config.get('mutable', False):
                 _LOGGER.warning(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
-                #raise PyCupraException(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
                 async_show_pycupra_notification(hass, f"Not starting action 'set_climater', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
                 return
 
@@ -860,22 +839,22 @@ def update_callback(hass, coordinator):
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the component from configuration.yaml."""
     hass.data.setdefault(DOMAIN, {})
-    _LOGGER.debug("In __init.py.async_setup()")
 
     if hass.config_entries.async_entries(DOMAIN):
-        _LOGGER.debug("hass.config_entries.async_entries() = True")
+        _LOGGER.debug("In __init.py.async_setup(): hass.config_entries.async_entries() = True")
         return True
 
     if DOMAIN in config:
         _LOGGER.info("Found existing PyCupra configuration.")
-        self.entry.async_start_reauth(self.hass)
-        #hass.async_create_task(
-        #    hass.config_entries.flow.async_init(
-        #        DOMAIN,
-        #        context={"source": SOURCE_IMPORT},
-        #        data=config[DOMAIN],
-        #    )
-        #)
+        # This section should not be reached, becaused it is deprecated
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data=config[DOMAIN],
+            )
+        )
+    _LOGGER.debug(f"In __init.py.async_setup(): No config entries found for {DOMAIN}")
 
     return True
 
@@ -932,37 +911,40 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry):
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-#def get_convert_conf(entry: ConfigEntry):
-#    return CONF_SCANDINAVIAN_MILES if entry.options.get(
-#        CONF_SCANDINAVIAN_MILES,
-#        entry.data.get(
-#            CONF_SCANDINAVIAN_MILES,
-#            False
-#        )
-#    ) else CONF_NO_CONVERSION
-#    return CONF_NO_CONVERSION
-
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate configuration from old version to new."""
-    _LOGGER.debug(f'Migrating from version {entry.version}')
+    _LOGGER.info(f'Migrating from version {entry.version}')
 
     # Migrate data from version 1
     if entry.version == 1:
+        _LOGGER.warning("Found config data in version %s.%s. This is unexpected. Trying to convert them.", entry.version, entry.minor_version)
         # Make a copy of old config
-        new = {**entry.data}
+        new_data = {**entry.data}
 
         # Convert from minutes to seconds for poll interval
         minutes = entry.options.get("update_interval", 1)
         seconds = minutes*60
-        new.pop("update_interval", None)
-        new[CONF_SCAN_INTERVAL] = seconds
+        new_data.pop("update_interval", None)
+        new_data[CONF_SCAN_INTERVAL] = seconds
 
         # Save "new" config
-        entry.data = {**new}
+        hass.config_entries.async_update_entry(entry, data=new_data, minor_version=1, version=2)
+        _LOGGER.info("Migration to version %s.%s successful", entry.version, entry.minor_version)
+    # Migrate data from version 1
+    if entry.version == 2 and entry.minor_version < 2:
+        # Make a copy of old config
+        new_data = {**entry.data}
+        new_options = {**entry.options}
 
-        entry.version = 2
+        # Delete "convert" option if present
+        if "convert" in entry.options:
+            _LOGGER.debug("Found config options entry 'convert'. Deleting it.")
+            new_options.pop("convert", None)
 
-    _LOGGER.info("Migration to version %s successful", entry.version)
+        # Save "new" config
+        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options, minor_version=2, version=2)
+
+    _LOGGER.info("Migration to version %s.%s successful", entry.version, entry.minor_version)
     return True
 
 class PyCupraData:
@@ -1169,32 +1151,33 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             logPrefix=self._logPrefix,
             hass=hass
         )
+        self._euda = self.entry.options.get(CONF_EUDA, self.entry.data.get(CONF_EUDA, False))
+        if self._euda:
+            self.eudaConnection = EUDAConnection(
+                session=async_get_clientsession(hass),
+                brand=self.entry.data[CONF_BRAND],
+                username=self.entry.data[CONF_USERNAME],
+                password=self.entry.data[CONF_PASSWORD],
+                fulldebug=self.entry.options.get(CONF_DEBUG, self.entry.data.get(CONF_DEBUG, DEFAULT_DEBUG)),
+                logPrefix=self._logPrefix,
+                hass=hass
+            )
         self.firebaseWanted=self.entry.options.get(CONF_FIREBASE, self.entry.data.get(CONF_FIREBASE, False))
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
 
     async def _async_update_data(self):
         """Update data via library."""
-        vehicle = await self.update()
-
+        vehicle, eudaVehicle = await self.update()
         if not vehicle:
             raise UpdateFailed("No vehicles found.")
 
-        # Backward compatibility
-        #default_convert_conf = get_convert_conf(self.entry)
-
-        #convert_conf = self.entry.options.get(
-        #    CONF_CONVERT,
-        #    self.entry.data.get(
-        #        CONF_CONVERT,
-        #        default_convert_conf
-        #    )
-        #)
+        if self._euda and not eudaVehicle:
+            _LOGGER.error(f"No eudaVehicles found")
 
         dashboard = vehicle.dashboard(
             mutable=self.entry.options.get(CONF_MUTABLE),
             spin=self.entry.options.get(CONF_SPIN),
-            #miles=convert_conf == CONF_IMPERIAL_UNITS,
-            #scandinavian_miles=convert_conf == CONF_SCANDINAVIAN_MILES,
+            eudaVehicle=eudaVehicle,
         )
 
         return dashboard.instruments
@@ -1205,6 +1188,9 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         try:
             await self.connection.terminate()
             self.connection = None
+            if self._euda:
+                await self.eudaConnection.terminate()
+                self.eudaConnection = None
         except Exception as ex:
             _LOGGER.error("Failed to log out and revoke tokens for Cupra/Seat portal. Some tokens might still be valid.")
             return False
@@ -1222,11 +1208,25 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 return False
             # Get associated vehicles before we continue
             await self.connection.get_vehicles()
+
+            if self._euda:    
+                if await self.eudaConnection.doLogin() is False:
+                    _LOGGER.error(
+                        "Could not login to EUDA portal, please check your credentials and verify that the service is working"
+                    )
+                    return False
+                _LOGGER.debug('called eudaConnection.do_login')
+                # Get associated eudaVehicles before we continue
+                await self.eudaConnection.getVehicles()
+                loop = asyncio.get_running_loop()
+                if not await loop.run_in_executor(None, self.eudaConnection.readTripStatisticsFile):
+                    _LOGGER.warning('readTripStatisticsFile was not successful. Is there no file? Ignoring this problem.')
+
             return True
         except (PyCupraAccountLockedException, PyCupraAuthenticationException) as e:
             _LOGGER.error('In async_login.except. Exception:', e)
             # Raise auth failed error in config flow
-            raise # ConfigEntryAuthFailed(e) from e
+            raise 
         except:
             raise
 
@@ -1236,19 +1236,38 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         # Update vehicle data
         _LOGGER.debug("Updating data from Cupra/Seat API")
         try:
+            eudaVehicle= None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
             if self.firebaseWanted:
                 newStatus = await vehicle.initialiseFirebase(firebaseCredentialsFileName=FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, updateCallback=self.updateCallbackForNotifications)
                 #_LOGGER.debug(f"New status of firebase={newStatus}")
-            if await vehicle.update():
-                return vehicle
+            rc1 = await vehicle.update()
+            rc2 = True
+            if self._euda:
+                eudaVehicle = self.eudaConnection.vehicle(self.vin)
+                if self.eudaConnection._loginError == None:
+                    try:
+                        rc2 = await self.eudaConnection.update()
+                        if self.eudaConnection._loginError != None:
+                            _LOGGER.error(f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}")
+                            async_show_pycupra_notification(self.hass, f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.", title="EUDA connection failed", id="PyCupra_euda_error")
+                    except Exception as e:
+                        _LOGGER.error(f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}")
+                        async_show_pycupra_notification(self.hass, f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.", title="EUDA connection failed", id="PyCupra_euda_error")
+                else:
+                    rc2 = False
+            if rc1 and rc2:
+                return vehicle, eudaVehicle
             else:
-                _LOGGER.warning("Could not query update from Cupra/Seat API. Continuing with old vehicle data")
-                return vehicle
+                if not rc1:
+                    _LOGGER.warning("Could not query update from Cupra/Seat API. Continuing with old vehicle data")
+                if not rc2:
+                    _LOGGER.warning("Could not update from EUDA API. Continuing with old data")
+                return vehicle, eudaVehicle
         except Exception as error:
             _LOGGER.warning(f"An error occured while requesting update from Cupra/Seat API: {error}. Continuing with old vehicle data")
-            return vehicle
+            return vehicle, eudaVehicle
 
     async def updateCallbackForNotifications(self, updateType=0) -> Union[bool, Vehicle]:
         """Update status from API (called for notifications)"""
@@ -1256,20 +1275,30 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         # Update vehicle data
         _LOGGER.debug("Due to push notification, call for update of data from Cupra/Seat API")
         try:
+            eudaVehicle= None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
             if vehicle._haNotification != None:
                 async_show_pycupra_notification(self.hass, vehicle._haNotification, title="Request failed", id="PyCupra_request_failed")
                 vehicle.clearHANotification()
-            if await vehicle.update(updateType):
+            rc1 = await vehicle.update()
+            rc2 = True
+            if self._euda:
+                eudaVehicle = self.eudaConnection.vehicle(self.vin)
+                #rc2 = await self.eudaConnection.update() # commented out, because calling self.eudaConnection.update() during "normal" updates should be sufficient
+            if rc1 and rc2:
                 dashboard = vehicle.dashboard(
                     mutable=self.entry.options.get(CONF_MUTABLE),
                     spin=self.entry.options.get(CONF_SPIN),
+                    eudaVehicle=eudaVehicle,
                 )
                 self.async_set_updated_data(dashboard.instruments)
                 return True
             else:
-                _LOGGER.warning("Could not query update from Cupra/Seat API")
+                if not rc1:
+                    _LOGGER.warning("Could not query update from Cupra/Seat API")
+                if not rc2:
+                    _LOGGER.warning("Could not update from EUDA API. Continuing with old data")
                 return False
         except Exception as error:
             _LOGGER.warning(f"An error occured in updateCallbackForNotifications while requesting update from Cupra/Seat API: {error}")
@@ -1280,8 +1309,11 @@ class PyCupraCoordinator(DataUpdateCoordinator):
 
         # Update vehicle data
         try:
+            eudaVehicle= None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
+            if self._euda:
+                eudaVehicle = self.eudaConnection.vehicle(self.vin)
             if whichInstrument.attr == 'position':
                 _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
                 rc = await vehicle.get_position()
@@ -1302,6 +1334,7 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 dashboard = vehicle.dashboard(
                     mutable=self.entry.options.get(CONF_MUTABLE),
                     spin=self.entry.options.get(CONF_SPIN),
+                    eudaVehicle=eudaVehicle,
                 )
                 self.async_set_updated_data(dashboard.instruments)
                 return True
