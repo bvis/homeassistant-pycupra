@@ -41,6 +41,7 @@ from pycupra.exceptions import (
     PyCupraAccountLockedException,
     PyCupraLoginFailedException,
     PyCupraInvalidRequestException,
+    PyCupraRequestInProgressException,
 )
 
 from .const import (
@@ -420,6 +421,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning(f"Failed to execute service call 'set_schedule' with data '{service_call}'")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_schedule' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_schedule'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -467,6 +469,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning(f"Failed to execute service call 'set_departure_profile_schedule' with data '{service_call}'")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_departure_profile_schedule' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_departure_profile_schedule'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -514,6 +517,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning(f"Failed to execute service call 'set_climatisation_timer_schedule' with data '{service_call}'")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_climatisation_timer_schedule' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climatisation_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -564,8 +568,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_auxiliary_heating_timer_schedule' with data '{service_call}'")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'set_auxiliary_heating_timer_schedule' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_auxiliary_heating_timer_schedule' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -611,8 +619,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.debug(f"Service call 'send_destination' executed without error")
             else:
                 _LOGGER.warning(f"Failed to execute service call 'send_destination' with data '{service_call}'")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'send_destination' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'send_destination'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'send_destination' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'send_destination'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -634,8 +646,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_charge_limit' with data '{service_call}'")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'set_charge_limit' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_charge_limit' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -657,8 +673,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_current' with data '{service_call}'")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'set_current' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_current'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_current' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_current'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -680,8 +700,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_target_soc' with data '{service_call}'")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'set_target_soc' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_target_soc' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -701,6 +725,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await coordinator.async_request_refresh()
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_pheater_duration' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_pheater_duration'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -759,8 +784,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         _LOGGER.warning(f"Failed to execute service call 'set_climater' with data '{service_call}'")
             else:
                 _LOGGER.warning(f"Service call 'set_climater' without valid action parameter")
+        except (PyCupraRequestInProgressException) as e:
+            _LOGGER.warning(f"Service call 'set_climater' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climater'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except (PyCupraInvalidRequestException) as e:
             _LOGGER.warning(f"Service call 'set_climater' failed {e}")
+            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climater'. Error: {e}", title="Action error", id="PyCupra_action_error")
         except Exception as e:
             raise
 
@@ -1239,10 +1268,14 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             eudaVehicle= None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
-            if self.firebaseWanted:
-                newStatus = await vehicle.initialiseFirebase(firebaseCredentialsFileName=FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, updateCallback=self.updateCallbackForNotifications)
-                #_LOGGER.debug(f"New status of firebase={newStatus}")
-            rc1 = await vehicle.update()
+            if vehicle == None:
+                _LOGGER.warning(f"PyCupraCoordinator.update() called. But vehicle is none.")
+                rc1 = False
+            else:
+                if self.firebaseWanted:
+                    newStatus = await vehicle.initialiseFirebase(firebaseCredentialsFileName=FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, updateCallback=self.updateCallbackForNotifications)
+                    #_LOGGER.debug(f"New status of firebase={newStatus}")
+                rc1 = await vehicle.update()
             rc2 = True
             if self._euda:
                 eudaVehicle = self.eudaConnection.vehicle(self.vin)
