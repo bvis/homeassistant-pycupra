@@ -65,8 +65,9 @@ class PyCupraClimate(PyCupraEntity, ClimateEntity):
         """Return hvac operation ie. heat, cool mode.
         Need to be one of HVAC_MODE_*.
         """
-        if not self.instrument.hvac_mode:
-            return HVACMode.OFF
+        if self.instrument != None:
+            if not self.instrument.hvac_mode:
+                return HVACMode.OFF
         return HVACMode.HEAT_COOL
 
         hvac_modes = {
@@ -91,10 +92,10 @@ class PyCupraClimate(PyCupraEntity, ClimateEntity):
     @property
     def target_temperature(self):
         """Return the temperature we try to reach."""
-        if self.instrument.target_temperature:
-            return float(self.instrument.target_temperature)
-        else:
-            return STATE_UNKNOWN
+        if self.instrument != None:
+            if self.instrument.target_temperature:
+                return float(self.instrument.target_temperature)
+        return STATE_UNKNOWN
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperatures."""

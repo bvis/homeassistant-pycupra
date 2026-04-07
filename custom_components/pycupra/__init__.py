@@ -1237,6 +1237,12 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 return False
             # Get associated vehicles before we continue
             await self.connection.get_vehicles()
+            vehicle = self.connection.vehicle(self.vin)
+            if vehicle == None:
+                _LOGGER.warning(f"PyCupraCoordinator.async_login() called. But vehicle with VIN ending on '{self.vin[-4:]}' was not found.")
+            elif vehicle.deactivated:
+                _LOGGER.warning(f"Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem.")
+                async_show_pycupra_notification(self.hass, f"Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem.", title="Vehicle offline", id="PyCupra_vehicle_offline_error")
 
             if self._euda:    
                 if await self.eudaConnection.doLogin() is False:

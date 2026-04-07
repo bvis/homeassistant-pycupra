@@ -5,7 +5,7 @@ import logging
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.const import CONF_RESOURCES
+from homeassistant.const import CONF_RESOURCES, STATE_UNKNOWN
 
 
 from . import DATA, DATA_KEY, DOMAIN, PyCupraEntity, UPDATE_CALLBACK, async_show_pycupra_notification
@@ -50,38 +50,38 @@ class PyCupraNumber(PyCupraEntity, NumberEntity):
 
     @property
     def native_min_value(self):
-        if self.instrument.min_value:
-            return self.instrument.min_value
-        else:
-            return 0
+        if self.instrument != None:
+            if self.instrument.min_value:
+                return self.instrument.min_value
+        return 0
 
     @property
     def native_max_value(self):
-        if self.instrument.max_value:
-            return self.instrument.max_value
-        else:
-            return 100
+        if self.instrument != None:
+            if self.instrument.max_value:
+                return self.instrument.max_value
+        return 100
 
     @property
     def native_step(self):
-        if self.instrument.step:
-            return self.instrument.step
-        else:
-            return 10
+        if self.instrument != None:
+            if self.instrument.step:
+                return self.instrument.step
+        return 10
 
     @property
     def native_value(self):
-        if self.instrument.value:
-            return float(self.instrument.value)
-        else:
-            return STATE_UNKNOWN
+        if self.instrument != None:
+            if self.instrument.value:
+                return float(self.instrument.value)
+        return STATE_UNKNOWN
 
     @property
     def native_unit_of_measurement(self):
-        if self.instrument.unit:
-            return self.instrument.unit
-        else:
-            return None
+        if self.instrument != None:
+            if self.instrument.unit:
+                return self.instrument.unit
+        return None
 
     async def async_set_native_value(self, value) -> None:
         try:

@@ -117,7 +117,7 @@ You can also set the log level different for different components of PyCupra:
 
 * **pycupra.XYZ:** with connection, vehicle, dashboard and firebase for XYZ 
 
-* **custom_components.pycupra.XYZ:** with button, binary_sensor, climate, device_tracker, lock, sensor and switch for XYZ 
+* **custom_components.pycupra.XYZ:** with button, binary_sensor, climate, device_tracker, lock, number, sensor and switch for XYZ 
 
 
 ## Login problems?
