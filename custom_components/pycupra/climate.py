@@ -61,13 +61,6 @@ class PyCupraClimate(PyCupraEntity, ClimateEntity):
             return HVACMode.OFF
         return HVACMode.HEAT_COOL
 
-        hvac_modes = {
-            "HEAT_COOL": HVACMode.HEAT_COOL,
-            # "HEATING": HVAC_MODE_HEAT,
-            # "COOLING": HVAC_MODE_COOL,
-        }
-        return hvac_modes.get(self.instrument.hvac_mode, HVACMode.OFF)
-
     @property
     def hvac_modes(self):
         """Return the list of available hvac operation modes.
