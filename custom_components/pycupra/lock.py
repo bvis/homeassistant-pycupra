@@ -7,7 +7,7 @@ import logging
 from homeassistant.components.lock import LockEntity
 from homeassistant.const import CONF_RESOURCES
 
-from . import DATA, DATA_KEY, DOMAIN, UPDATE_CALLBACK, PyCupraEntity
+from . import DATA, DATA_KEY, DOMAIN, UPDATE_CALLBACK, PyCupraEntity, async_show_pycupra_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,10 +57,28 @@ class PyCupraLock(PyCupraEntity, LockEntity):
 
     async def async_lock(self, **kwargs):
         """Lock the car."""
-        await self.instrument.lock()
-        self.async_write_ha_state()
+        try:
+            await self.instrument.lock()
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"An error occurred while trying to lock '{self.instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(
+                self.hass,
+                f"An error occurred while trying to lock '{self.instrument.attr}'. Error: {e}",
+                title="Lock error",
+                id="PyCupra_lock_error",
+            )
 
     async def async_unlock(self, **kwargs):
         """Unlock the car."""
-        await self.instrument.unlock()
-        self.async_write_ha_state()
+        try:
+            await self.instrument.unlock()
+            self.async_write_ha_state()
+        except Exception as e:
+            _LOGGER.error(f"An error occurred while trying to unlock '{self.instrument.attr}'. Error: {e}")
+            async_show_pycupra_notification(
+                self.hass,
+                f"An error occurred while trying to unlock '{self.instrument.attr}'. Error: {e}",
+                title="Unlock error",
+                id="PyCupra_unlock_error",
+            )
