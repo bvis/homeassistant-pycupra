@@ -1,13 +1,14 @@
 """
 Support for My Cupra Platform
 """
+
 import logging
 
 from homeassistant.components.device_tracker import SourceType
 from homeassistant.components.device_tracker.config_entry import TrackerEntity
+from homeassistant.const import CONF_RESOURCES
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.util import slugify
-from homeassistant.const import CONF_RESOURCES
 
 from . import DATA, DATA_KEY, DOMAIN, SIGNAL_STATE_UPDATED, PyCupraEntity
 
@@ -24,9 +25,7 @@ async def async_setup_entry(hass, entry, async_add_devices):
             resources = entry.data[CONF_RESOURCES]
 
         async_add_devices(
-            PyCupraDeviceTracker(
-                data, instrument.vehicle_name, instrument.component, instrument.attr
-            )
+            PyCupraDeviceTracker(data, instrument.vehicle_name, instrument.component, instrument.attr)
             for instrument in (
                 instrument
                 for instrument in data.instruments
@@ -49,8 +48,8 @@ async def async_setup_scanner(hass, config, async_see, discovery_info=None):
     async def see_vehicle():
         """Handle the reporting of the vehicle position."""
         host_name = data.vehicle_name(instrument.vehicle)
-        dev_id = "{}".format(slugify(host_name))
-        _LOGGER.debug("Getting location of %s" % host_name)
+        dev_id = f"{slugify(host_name)}"
+        _LOGGER.debug("Getting location of %s", host_name)
         await async_see(
             dev_id=dev_id,
             host_name=host_name,

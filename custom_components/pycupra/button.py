@@ -1,12 +1,11 @@
 """Support for PyCupra buttons."""
 
 import logging
-from typing import Any, Dict, Optional
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import CONF_RESOURCES
 
-from . import DATA, DATA_KEY, DOMAIN, PyCupraEntity, UPDATE_CALLBACK
+from . import DATA, DATA_KEY, DOMAIN, UPDATE_CALLBACK, PyCupraEntity, async_show_pycupra_notification
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,5 +71,9 @@ class PyCupraButton(PyCupraEntity, ButtonEntity):
             self.async_write_ha_state()
         except Exception as e:
             _LOGGER.error(f"An error occurred, while trying to press '{instrument.attr}'. Error: {e}")
-            async_show_pycupra_notification(self.hass, f"An error occurred, while trying to press '{instrument.attr}'. Error: {e}", title="Press button error", id="PyCupra_press_button_error")
-
+            async_show_pycupra_notification(
+                self.hass,
+                f"An error occurred, while trying to press '{instrument.attr}'. Error: {e}",
+                title="Press button error",
+                id="PyCupra_press_button_error",
+            )

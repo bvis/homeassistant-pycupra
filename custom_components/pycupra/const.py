@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 DOMAIN = "pycupra"
 DATA_KEY = DOMAIN
 
@@ -13,7 +11,7 @@ CONF_INSTRUMENTS = "instruments"
 CONF_DEBUG = "debug"
 CONF_NIGHTLY_UPDATE_REDUCTION = "nightly_update_reduction"
 CONF_FIREBASE = "use_push_notifications"
-CONF_LOGPREFIX= "log_prefix"
+CONF_LOGPREFIX = "log_prefix"
 CONF_EUDA = "use_euda_files"
 
 # Service definitions

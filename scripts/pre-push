@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Pre-push hook: runs lint, typecheck, and tests before allowing push.
+# Install with: ./scripts/install-hooks.sh
+
+set -e
+
+echo "Running pre-push checks..."
+
+if command -v docker &> /dev/null && docker info &> /dev/null 2>&1; then
+    echo "Running checks via Docker..."
+    make check
+else
+    echo "Docker not available, running checks locally..."
+    ruff check custom_components/pycupra/ tests/
+    ruff format --check custom_components/pycupra/ tests/
+    mypy custom_components/pycupra/
+    pytest tests/ -v --tb=short
+fi
+
+echo "All checks passed!"

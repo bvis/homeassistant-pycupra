@@ -5,3 +5,20 @@ dist/
 __pycache__/
 cupra*.json
 www/
+docs/superpowers/
+CLAUDE.md
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python dev
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage

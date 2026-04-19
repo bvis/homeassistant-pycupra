@@ -1,42 +1,38 @@
-import homeassistant.helpers.config_validation as cv
 import logging
+
+import homeassistant.helpers.config_validation as cv
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_PASSWORD,
-    CONF_RESOURCES,
-    CONF_USERNAME,
-    CONF_SCAN_INTERVAL
-)
+from homeassistant.const import CONF_PASSWORD, CONF_RESOURCES, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from pycupra.connection import Connection
+
 from .const import (
-    CONF_DEBUG,
-    CONF_MUTABLE,
     CONF_BRAND,
+    CONF_DEBUG,
+    CONF_EUDA,
+    CONF_FIREBASE,
+    CONF_INSTRUMENTS,
+    CONF_LOGPREFIX,
+    CONF_MUTABLE,
+    CONF_NIGHTLY_UPDATE_REDUCTION,
     CONF_SPIN,
     CONF_VEHICLE,
-    CONF_INSTRUMENTS,
-    CONF_NIGHTLY_UPDATE_REDUCTION,
-    CONF_FIREBASE,
-    CONF_LOGPREFIX,
-    CONF_EUDA,
-    MIN_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    DEFAULT_DEBUG
+    MIN_SCAN_INTERVAL,
 )
 
 _LOGGER = logging.getLogger(__name__)
-#TOKEN_FILE_NAME_AND_PATH='./custom_components/pycupra/cupra_token.json'
+# TOKEN_FILE_NAME_AND_PATH='./custom_components/pycupra/cupra_token.json'
 
 
 class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 2 # Version 1 was never used (seatconnect had version 1 and 2)
-    MINOR_VERSION = 2 # Minor_version 1 still had the "convert" option
+    VERSION = 2  # Version 1 was never used (seatconnect had version 1 and 2)
+    MINOR_VERSION = 2  # Minor_version 1 still had the "convert" option
     task_login = None
     task_finish = None
     task_get_vehicles = None
@@ -63,7 +59,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
                 CONF_INSTRUMENTS: {},
-                CONF_VEHICLE: None
+                CONF_VEHICLE: None,
             }
             # Set default options
             self._options = {
@@ -75,7 +71,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_NIGHTLY_UPDATE_REDUCTION: False,
                 CONF_LOGPREFIX: None,
                 CONF_EUDA: False,
-                CONF_RESOURCES: []
+                CONF_RESOURCES: [],
             }
 
             _LOGGER.debug("Creating connection to Cupra/Seat portal")
@@ -85,27 +81,29 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 username=self._data[CONF_USERNAME],
                 password=self._data[CONF_PASSWORD],
                 fulldebug=False,
-                nightlyUpdateReduction= False,
-                hass= self.hass,
+                nightlyUpdateReduction=False,
+                hass=self.hass,
             )
 
             return await self.async_step_login()
 
         brand_values = ["cupra", "seat"]
         return self.async_show_form(
-            step_id="user", data_schema=vol.Schema(
+            step_id="user",
+            data_schema=vol.Schema(
                 {
                     vol.Required(CONF_BRAND): vol.In(brand_values),
                     vol.Required(CONF_USERNAME): cv.string,
                     vol.Required(CONF_PASSWORD): cv.string,
                 }
-            ), errors=self._errors
+            ),
+            errors=self._errors,
         )
 
     # noinspection PyBroadException
     async def _async_task_login(self):
         try:
-            #result = await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH)
+            # result = await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH)
             result = await self._connection.doLogin()
         except Exception as e:
             _LOGGER.error(f"Login failed with error: {e}")
@@ -114,9 +112,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if result is False:
             self._errors["base"] = "cannot_connect"
 
-        self.hass.async_create_task(
-            self.hass.config_entries.flow.async_configure(flow_id=self.flow_id)
-        )
+        self.hass.async_create_task(self.hass.config_entries.flow.async_configure(flow_id=self.flow_id))
 
     async def _async_task_get_vehicles(self):
         try:
@@ -128,9 +124,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if result is False:
             self._errors["base"] = "cannot_connect"
 
-        self.hass.async_create_task(
-            self.hass.config_entries.flow.async_configure(flow_id=self.flow_id)
-        )
+        self.hass.async_create_task(self.hass.config_entries.flow.async_configure(flow_id=self.flow_id))
 
     async def async_step_vehicle(self, user_input=None):
         if user_input is not None:
@@ -146,9 +140,10 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 {
                     vol.Required(CONF_VEHICLE, default=next(iter(vin_numbers))): vol.In(vin_numbers),
                     vol.Optional(CONF_SPIN, default=""): cv.string,
-                    vol.Required(CONF_MUTABLE, default=True): cv.boolean
+                    vol.Required(CONF_MUTABLE, default=True): cv.boolean,
                 }
-            ), errors=self._errors
+            ),
+            errors=self._errors,
         )
 
     async def async_step_monitoring(self, user_input=None):
@@ -159,22 +154,16 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._options[CONF_NIGHTLY_UPDATE_REDUCTION] = user_input[CONF_NIGHTLY_UPDATE_REDUCTION]
             self._options[CONF_DEBUG] = user_input[CONF_DEBUG]
             self._options[CONF_LOGPREFIX] = user_input[CONF_LOGPREFIX]
-            if user_input[CONF_LOGPREFIX]=='' or user_input[CONF_LOGPREFIX]==' ':
+            if user_input[CONF_LOGPREFIX] == "" or user_input[CONF_LOGPREFIX] == " ":
                 self._options[CONF_LOGPREFIX] = None
 
             await self.async_set_unique_id(self._data[CONF_VEHICLE])
             self._abort_if_unique_id_configured()
 
-            return self.async_create_entry(
-                title=self._data[CONF_VEHICLE],
-                data=self._data,
-                options=self._options
-            )
+            return self.async_create_entry(title=self._data[CONF_VEHICLE], data=self._data, options=self._options)
 
         instruments = self._init_info["CONF_VEHICLES"][self._data[CONF_VEHICLE]]
-        instruments_dict = {
-            instrument.attr: instrument.name for instrument in instruments
-        }
+        instruments_dict = {instrument.attr: instrument.name for instrument in instruments}
         self._data[CONF_INSTRUMENTS] = dict(sorted(instruments_dict.items(), key=lambda item: item[1]))
 
         return self.async_show_form(
@@ -182,35 +171,24 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=self._errors,
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_RESOURCES, default=list(self._data[CONF_INSTRUMENTS].keys())
-                    ): cv.multi_select(self._data[CONF_INSTRUMENTS]),
-                    vol.Required(
-                        CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
-                    ): vol.All(
-                        vol.Coerce(int),
-                        vol.Range(min=MIN_SCAN_INTERVAL, max=900)
+                    vol.Required(CONF_RESOURCES, default=list(self._data[CONF_INSTRUMENTS].keys())): cv.multi_select(
+                        self._data[CONF_INSTRUMENTS]
                     ),
-                    vol.Optional(
-                        CONF_FIREBASE,
-                        default=False
-                    ): cv.boolean,
-                    vol.Optional(
-                        CONF_NIGHTLY_UPDATE_REDUCTION,
-                        default=False
-                    ): cv.boolean,
+                    vol.Required(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
+                        vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=900)
+                    ),
+                    vol.Optional(CONF_FIREBASE, default=False): cv.boolean,
+                    vol.Optional(CONF_NIGHTLY_UPDATE_REDUCTION, default=False): cv.boolean,
                     vol.Optional(
                         CONF_LOGPREFIX,
-                        default='' #None
+                        default="",  # None
                     ): cv.string,
-                    vol.Required(
-                        CONF_DEBUG, default=False
-                    ): cv.boolean
+                    vol.Required(CONF_DEBUG, default=False): cv.boolean,
                 }
             ),
         )
 
-   # Authentication and login
+    # Authentication and login
     async def async_step_login(self, user_input=None):
         if not self.task_login:
             self.task_login = self.hass.async_create_task(self._async_task_login())
@@ -230,7 +208,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._errors:
             return self.async_show_progress_done(next_step_id="user")
 
-        #self.async_update_progress(0.5) # this function is not available before 2025.5.0
+        # self.async_update_progress(0.5) # this function is not available before 2025.5.0
         return await self.async_step_get_vehicles()
 
     async def async_step_get_vehicles(self, user_input=None):
@@ -253,48 +231,48 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_progress_done(next_step_id="user")
 
         for vehicle in self._connection.vehicles:
-            #_LOGGER.info(f"Found data for vehicle with VIN '{vehicle.vin}' from Cupra/Seat API")
+            # _LOGGER.info(f"Found data for vehicle with VIN '{vehicle.vin}' from Cupra/Seat API")
             _LOGGER.info(f"Found data for vehicle with VIN ending on '{vehicle.vin[-4:]}' from Cupra/Seat API")
         if len(self._connection.vehicles) == 0:
             return self.async_abort(reason="Could not find any vehicles associated with account!")
 
         self._init_info["CONF_VEHICLES"] = {
-            vehicle.vin: vehicle.dashboard().instruments
-            for vehicle in self._connection.vehicles
+            vehicle.vin: vehicle.dashboard().instruments for vehicle in self._connection.vehicles
         }
         return self.async_show_progress_done(next_step_id="vehicle")
 
-
     async def async_step_reauth(self, entry) -> dict:
         """Handle initiation of re-authentication with My Cupra."""
-        #_LOGGER.debug(f"In async_step_reauth. entry={entry}")
+        # _LOGGER.debug(f"In async_step_reauth. entry={entry}")
         self.entry = entry
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input: dict = None) -> dict:
+    async def async_step_reauth_confirm(self, user_input: dict | None = None) -> dict:
         """Handle re-authentication with My Cupra."""
         errors: dict = {}
-        #_LOGGER.debug(f"In async_step_reauth_confirm. user_input={user_input}")
-        #_LOGGER.debug(f"In async_step_reauth_confirm. self.entry={self.entry}")
+        # _LOGGER.debug(f"In async_step_reauth_confirm. user_input={user_input}")
+        # _LOGGER.debug(f"In async_step_reauth_confirm. self.entry={self.entry}")
 
         if user_input is not None:
-            #_LOGGER.debug("Creating connection to My Cupra")
+            # _LOGGER.debug("Creating connection to My Cupra")
             self._connection = Connection(
                 session=async_get_clientsession(self.hass),
                 brand=user_input[CONF_BRAND],
                 username=user_input[CONF_USERNAME],
                 password=user_input[CONF_PASSWORD],
-                fulldebug=False, 
-                nightlyUpdateReduction=False, 
+                fulldebug=False,
+                nightlyUpdateReduction=False,
                 logPrefix=None,
-                hass= self.hass,
+                hass=self.hass,
             )
 
             # noinspection PyBroadException
             try:
-                #if not await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH):
+                # if not await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH):
                 if not await self._connection.doLogin():
-                    _LOGGER.debug("Unable to login to Cupra/Seat portal. Need to accept a new EULA/T&C? Try logging in to the portal: https://my.seat/portal/")
+                    _LOGGER.debug(
+                        "Unable to login to Cupra/Seat portal. Need to accept a new EULA/T&C? Try logging in to the portal: https://my.seat/portal/"
+                    )
                     errors["base"] = "cannot_connect"
                 else:
                     return self.async_update_reload_and_abort(
@@ -317,7 +295,8 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
-   # Configuration.yaml import
+
+    # Configuration.yaml import
     async def async_step_import(self, yaml):
         """Import existing configuration from YAML config."""
         # Set default data and options
@@ -326,7 +305,7 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_USERNAME: None,
             CONF_PASSWORD: None,
             CONF_INSTRUMENTS: {},
-            CONF_VEHICLE: None
+            CONF_VEHICLE: None,
         }
         self._options = {
             CONF_MUTABLE: True,
@@ -337,16 +316,16 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_NIGHTLY_UPDATE_REDUCTION: False,
             CONF_LOGPREFIX: None,
             CONF_EUDA: False,
-            CONF_RESOURCES: []
+            CONF_RESOURCES: [],
         }
         self._init_info = {}
 
         # Check if integration is already configured
         if self._async_current_entries():
-            _LOGGER.info(f"Integration is already setup, please remove yaml configuration as it is deprecated")
+            _LOGGER.info("Integration is already setup, please remove yaml configuration as it is deprecated")
 
         # Validate and convert yaml config
-        if all (entry in yaml for entry in ("brand","username", "password")):
+        if all(entry in yaml for entry in ("brand", "username", "password")):
             self._data[CONF_BRAND] = yaml["brand"]
             self._data[CONF_USERNAME] = yaml["username"]
             self._data[CONF_PASSWORD] = yaml["password"]
@@ -361,13 +340,12 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 seconds = int(yaml["scan_interval"]["seconds"])
             if "minutes" in yaml["scan_interval"]:
                 minutes = int(yaml["scan_interval"]["minutes"])
-            self._options[CONF_SCAN_INTERVAL] = seconds+(minutes*60)
+            self._options[CONF_SCAN_INTERVAL] = seconds + (minutes * 60)
         if "name" in yaml:
             vin = next(iter(yaml["name"]))
             self._data[CONF_VEHICLE] = vin.upper()
-        if "response_debug" in yaml:
-                if yaml["response_debug"]:
-                    self._options[CONF_DEBUG] = True
+        if yaml.get("response_debug"):
+            self._options[CONF_DEBUG] = True
 
         # Try to login and fetch vehicles
         self._connection = Connection(
@@ -378,46 +356,36 @@ class PyCupraConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             fulldebug=False,
             nightlyUpdateReduction=False,
             logPrefix=None,
-            hass= self.hass,
+            hass=self.hass,
         )
         try:
-            #await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH)
+            # await self._connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH)
             await self._connection.doLogin()
             await self._connection.get_vehicles()
-        except:
+        except Exception:
             raise
 
         if len(self._connection.vehicles) == 0:
             return self.async_abort(reason="MyCupra/MySeat account didn't return any vehicles")
         self._init_info["CONF_VEHICLES"] = {
-            vehicle.vin: vehicle.dashboard().instruments
-            for vehicle in self._connection.vehicles
+            vehicle.vin: vehicle.dashboard().instruments for vehicle in self._connection.vehicles
         }
 
-        if self._data[CONF_VEHICLE] is None:
-            self._data[CONF_VEHICLE] = next(iter(self._init_info["CONF_VEHICLES"]))
-        elif self._data[CONF_VEHICLE] not in self._init_info["CONF_VEHICLES"]:
+        if self._data[CONF_VEHICLE] is None or self._data[CONF_VEHICLE] not in self._init_info["CONF_VEHICLES"]:
             self._data[CONF_VEHICLE] = next(iter(self._init_info["CONF_VEHICLES"]))
 
         await self.async_set_unique_id(self._data[CONF_VEHICLE])
         self._abort_if_unique_id_configured()
 
         instruments = self._init_info["CONF_VEHICLES"][self._data[CONF_VEHICLE]]
-        self._data[CONF_INSTRUMENTS] = {
-            instrument.attr: instrument.name for instrument in instruments
-        }
+        self._data[CONF_INSTRUMENTS] = {instrument.attr: instrument.name for instrument in instruments}
 
         if "resources" in yaml:
             for resource in yaml["resources"]:
                 if resource in self._data[CONF_INSTRUMENTS]:
                     self._options[CONF_RESOURCES].append(resource)
 
-        return self.async_create_entry(
-            title=self._data[CONF_VEHICLE],
-            data=self._data,
-            options=self._options
-        )
-
+        return self.async_create_entry(title=self._data[CONF_VEHICLE], data=self._data, options=self._options)
 
     @staticmethod
     @callback
@@ -459,9 +427,9 @@ class PyCupraConnectOptionsFlowHandler(config_entries.OptionsFlow):
             options[CONF_MUTABLE] = user_input.get(CONF_MUTABLE, True)
             options[CONF_DEBUG] = user_input.get(CONF_DEBUG, False)
             options[CONF_LOGPREFIX] = user_input.get(CONF_LOGPREFIX, None)
-            if user_input.get(CONF_LOGPREFIX, None)=='' or user_input.get(CONF_LOGPREFIX, None)==' ':
+            if user_input.get(CONF_LOGPREFIX, None) == "" or user_input.get(CONF_LOGPREFIX, None) == " ":
                 options[CONF_LOGPREFIX] = None
-            #uncomment this, if EUDA option shall be visible: options[CONF_EUDA] = user_input.get(CONF_EUDA, False)
+            # uncomment this, if EUDA option shall be visible: options[CONF_EUDA] = user_input.get(CONF_EUDA, False)
             options[CONF_RESOURCES] = user_input.get(CONF_RESOURCES, [])
             return self.async_create_entry(
                 title=self._config_entry,
@@ -470,87 +438,81 @@ class PyCupraConnectOptionsFlowHandler(config_entries.OptionsFlow):
                 },
             )
 
-        instruments = self._config_entry.data.get(CONF_INSTRUMENTS, {})
-
-        instruments_dict = dict(sorted(
-            self._config_entry.data.get(
-                CONF_INSTRUMENTS,
-                self._config_entry.options.get(CONF_RESOURCES, {})).items(),
-            key=lambda item: item[1]))
-
-        self._config_entry.data.get(
-                            CONF_INSTRUMENTS,
-                            self._config_entry.options.get(CONF_RESOURCES, {})
-                        )
-
-        defaultLogPrefix=self._config_entry.options.get(CONF_LOGPREFIX,
-            self._config_entry.data.get(CONF_LOGPREFIX, None)
+        instruments_dict = dict(
+            sorted(
+                self._config_entry.data.get(
+                    CONF_INSTRUMENTS, self._config_entry.options.get(CONF_RESOURCES, {})
+                ).items(),
+                key=lambda item: item[1],
+            )
         )
-        if defaultLogPrefix==None:
-            defaultLogPrefix=''
+
+        self._config_entry.data.get(CONF_INSTRUMENTS, self._config_entry.options.get(CONF_RESOURCES, {}))
+
+        defaultLogPrefix = self._config_entry.options.get(
+            CONF_LOGPREFIX, self._config_entry.data.get(CONF_LOGPREFIX, None)
+        )
+        if defaultLogPrefix is None:
+            defaultLogPrefix = ""
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
                         CONF_SCAN_INTERVAL,
-                        default=self._config_entry.options.get(CONF_SCAN_INTERVAL,
-                            self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-                        )
-                    ): vol.All(
-                        vol.Coerce(int),
-                        vol.Range(min=MIN_SCAN_INTERVAL, max=900)
-                    ),
+                        default=self._config_entry.options.get(
+                            CONF_SCAN_INTERVAL, self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+                        ),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=900)),
                     vol.Optional(
                         CONF_FIREBASE,
-                        default=self._config_entry.options.get(CONF_FIREBASE,
-                            self._config_entry.data.get(CONF_FIREBASE, False)
-                        )
+                        default=self._config_entry.options.get(
+                            CONF_FIREBASE, self._config_entry.data.get(CONF_FIREBASE, False)
+                        ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_NIGHTLY_UPDATE_REDUCTION,
-                        default=self._config_entry.options.get(CONF_NIGHTLY_UPDATE_REDUCTION,
-                            self._config_entry.data.get(CONF_NIGHTLY_UPDATE_REDUCTION, False)
-                        )
+                        default=self._config_entry.options.get(
+                            CONF_NIGHTLY_UPDATE_REDUCTION,
+                            self._config_entry.data.get(CONF_NIGHTLY_UPDATE_REDUCTION, False),
+                        ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_SPIN,
-                        default=self._config_entry.options.get(CONF_SPIN,
-                            self._config_entry.data.get(CONF_SPIN, "")
-                        )
+                        default=self._config_entry.options.get(CONF_SPIN, self._config_entry.data.get(CONF_SPIN, "")),
                     ): cv.string,
                     vol.Optional(
                         CONF_MUTABLE,
-                        default=self._config_entry.options.get(CONF_MUTABLE,
-                            self._config_entry.data.get(CONF_MUTABLE, False)
-                        )
+                        default=self._config_entry.options.get(
+                            CONF_MUTABLE, self._config_entry.data.get(CONF_MUTABLE, False)
+                        ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_DEBUG,
-                        default=self._config_entry.options.get(CONF_DEBUG,
-                            self._config_entry.data.get(CONF_DEBUG, False)
-                        )
+                        default=self._config_entry.options.get(
+                            CONF_DEBUG, self._config_entry.data.get(CONF_DEBUG, False)
+                        ),
                     ): cv.boolean,
                     vol.Optional(
                         CONF_LOGPREFIX,
-                        #default=self._config_entry.options.get(CONF_LOGPREFIX,
+                        # default=self._config_entry.options.get(CONF_LOGPREFIX,
                         #    self._config_entry.data.get(CONF_LOGPREFIX, None)
-                        #)
-                        default= defaultLogPrefix
+                        # )
+                        default=defaultLogPrefix,
                     ): cv.string,
-                    #uncomment the following lines, if EUDA option shall be visible
-                    #vol.Optional(
+                    # uncomment the following lines, if EUDA option shall be visible
+                    # vol.Optional(
                     #    CONF_EUDA,
                     #    default=self._config_entry.options.get(CONF_EUDA,
                     #        self._config_entry.data.get(CONF_EUDA, False)
                     #    )
-                    #): cv.boolean,
+                    # ): cv.boolean,
                     vol.Optional(
                         CONF_RESOURCES,
-                        default=self._config_entry.options.get(CONF_RESOURCES,
-                            self._config_entry.data.get(CONF_RESOURCES, [])
-                        )
-                    ): cv.multi_select(instruments_dict) 
+                        default=self._config_entry.options.get(
+                            CONF_RESOURCES, self._config_entry.data.get(CONF_RESOURCES, [])
+                        ),
+                    ): cv.multi_select(instruments_dict),
                 }
             ),
         )

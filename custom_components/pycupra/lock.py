@@ -1,18 +1,19 @@
 """
 Support for My Cupra Platform
 """
+
 import logging
 
 from homeassistant.components.lock import LockEntity
 from homeassistant.const import CONF_RESOURCES
 
-from . import DATA, DATA_KEY, DOMAIN, PyCupraEntity, UPDATE_CALLBACK
+from . import DATA, DATA_KEY, DOMAIN, UPDATE_CALLBACK, PyCupraEntity
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """ Setup the PyCupra lock """
+    """Setup the PyCupra lock"""
     if discovery_info is None:
         return
 
@@ -29,7 +30,13 @@ async def async_setup_entry(hass, entry, async_add_devices):
             resources = entry.data[CONF_RESOURCES]
 
         async_add_devices(
-            PyCupraLock(data, instrument.vehicle_name, instrument.component, instrument.attr, hass.data[DOMAIN][entry.entry_id][UPDATE_CALLBACK])
+            PyCupraLock(
+                data,
+                instrument.vehicle_name,
+                instrument.component,
+                instrument.attr,
+                hass.data[DOMAIN][entry.entry_id][UPDATE_CALLBACK],
+            )
             for instrument in (
                 instrument
                 for instrument in data.instruments

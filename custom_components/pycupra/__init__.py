@@ -1,96 +1,129 @@
-# -*- coding: utf-8 -*-
 """
 PyCupra integration
 
 Read more at https://github.com/WulfgarW/homeassistant-pycupra/
 """
-import re
+
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
-from typing import Union
-import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, SOURCE_REAUTH, SOURCE_IMPORT
+import voluptuous as vol
+from homeassistant.components.persistent_notification import async_create as async_pn_create
+from homeassistant.components.persistent_notification import async_dismiss as async_pn_dismiss
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
-    CONF_NAME,
     CONF_PASSWORD,
     CONF_RESOURCES,
     CONF_SCAN_INTERVAL,
-    CONF_USERNAME, EVENT_HOMEASSISTANT_STOP,
+    CONF_USERNAME,
+    EVENT_HOMEASSISTANT_STOP,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_validation as cv, device_registry
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.icon import icon_for_battery_level
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.helpers.redact import REDACTED, async_redact_data
-
-from homeassistant.components.persistent_notification import async_create as async_pn_create, async_dismiss as async_pn_dismiss
 
 from pycupra.connection import Connection
-from pycupra.vehicle import Vehicle
 from pycupra.eudaconnection import EUDAConnection
-from pycupra.eudavehicle import EUDAVehicle
 from pycupra.exceptions import (
-    PyCupraConfigException,
-    PyCupraAuthenticationException,
     PyCupraAccountLockedException,
-    PyCupraLoginFailedException,
+    PyCupraAuthenticationException,
+    PyCupraConfigException,
     PyCupraInvalidRequestException,
+    PyCupraLoginFailedException,
     PyCupraRequestInProgressException,
 )
+from pycupra.vehicle import Vehicle
 
 from .const import (
-    PLATFORMS,
     CONF_BRAND,
+    CONF_DEBUG,
+    CONF_EUDA,
+    CONF_FIREBASE,
+    CONF_INSTRUMENTS,
+    CONF_LOGPREFIX,
     CONF_MUTABLE,
+    CONF_NIGHTLY_UPDATE_REDUCTION,
     CONF_SPIN,
     CONF_VEHICLE,
-    CONF_INSTRUMENTS,
-    CONF_NIGHTLY_UPDATE_REDUCTION,
-    CONF_FIREBASE,
-    CONF_LOGPREFIX,
-    CONF_EUDA,
     DATA,
-    DATA_KEY,
-    MIN_SCAN_INTERVAL,
+    DATA_KEY,  # noqa: F401 - re-exported for use by platform modules
+    DEFAULT_DEBUG,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    SIGNAL_STATE_UPDATED,
-    UNDO_UPDATE_LISTENER, UPDATE_CALLBACK, CONF_DEBUG, DEFAULT_DEBUG, 
-    SERVICE_SET_SCHEDULE,
-    SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE,
-    SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE,
-    SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE,
-    SERVICE_SET_MAX_CURRENT,
+    MIN_SCAN_INTERVAL,
+    PLATFORMS,
     SERVICE_SEND_DESTINATION,
+    SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE,
     SERVICE_SET_CHARGE_LIMIT,
-    SERVICE_SET_TARGET_SOC,
     SERVICE_SET_CLIMATER,
+    SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE,
+    SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE,
+    SERVICE_SET_MAX_CURRENT,
     SERVICE_SET_PHEATER_DURATION,
+    SERVICE_SET_SCHEDULE,
+    SERVICE_SET_TARGET_SOC,
+    SIGNAL_STATE_UPDATED,
+    UNDO_UPDATE_LISTENER,
+    UPDATE_CALLBACK,
 )
 
 SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
-        vol.Required("id"): vol.In([1,2,3]),
+        vol.Required("id"): vol.In([1, 2, 3]),
         vol.Required("time"): cv.string,
         vol.Required("enabled"): cv.boolean,
         vol.Required("recurring"): cv.boolean,
         vol.Optional("date"): cv.string,
         vol.Optional("days"): cv.string,
-        #vol.Optional("temp"): vol.All(vol.Coerce(int), vol.Range(min=16, max=30)),
-        vol.Optional("temp"): vol.In([16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5, 21.0, 21.5, 22.0, 22.5, 23.0, 23.5, 
-                                      24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28,5, 29.0, 29.5, 30.0]), 
+        # vol.Optional("temp"): vol.All(vol.Coerce(int), vol.Range(min=16, max=30)),
+        vol.Optional("temp"): vol.In(
+            [
+                16.0,
+                16.5,
+                17.0,
+                17.5,
+                18.0,
+                18.5,
+                19.0,
+                19.5,
+                20.0,
+                20.5,
+                21.0,
+                21.5,
+                22.0,
+                22.5,
+                23.0,
+                23.5,
+                24.0,
+                24.5,
+                25.0,
+                25.5,
+                26.0,
+                26.5,
+                27.0,
+                27.5,
+                28.0,
+                28,
+                5,
+                29.0,
+                29.5,
+                30.0,
+            ]
+        ),
         vol.Optional("climatisation"): cv.boolean,
         vol.Optional("charging"): cv.boolean,
         vol.Optional("charge_current"): vol.Any(
             vol.Range(min=1, max=254),
-            vol.In(['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced'])
+            vol.In(["Maximum", "maximum", "Max", "max", "Minimum", "minimum", "Min", "min", "Reduced", "reduced"]),
         ),
         vol.Optional("charge_target"): vol.In([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
         vol.Optional("off_peak_active"): cv.boolean,
@@ -101,19 +134,19 @@ SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
 SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
-        vol.Required("id"): vol.In([1,2,3]),
+        vol.Required("id"): vol.In([1, 2, 3]),
         vol.Required("time"): cv.string,
         vol.Required("enabled"): cv.boolean,
         vol.Required("recurring"): cv.boolean,
         vol.Optional("date"): cv.string,
         vol.Optional("days"): cv.string,
-        vol.Required("chargingProgramId"): vol.In([1,2,3,4,5,6,7,8,9,10]),
+        vol.Required("chargingProgramId"): vol.In([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
     }
 )
 SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
-        vol.Required("id"): vol.In([1,2,3]),
+        vol.Required("id"): vol.In([1, 2, 3]),
         vol.Required("time"): cv.string,
         vol.Required("enabled"): cv.boolean,
         vol.Required("recurring"): cv.boolean,
@@ -124,13 +157,13 @@ SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE_SCHEMA = vol.Schema(
 SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
-        vol.Required("id"): vol.In([1,2,3]),
+        vol.Required("id"): vol.In([1, 2, 3]),
         vol.Required("time"): cv.string,
         vol.Required("enabled"): cv.boolean,
         vol.Required("recurring"): cv.boolean,
         vol.Optional("date"): cv.string,
-        #vol.Optional("days"): cv.string,
-        #vol.Required("spin"): vol.All(cv.string, vol.Match(r"^[0-9]{4}$"))
+        # vol.Optional("days"): cv.string,
+        # vol.Required("spin"): vol.All(cv.string, vol.Match(r"^[0-9]{4}$"))
     }
 )
 SERVICE_SET_MAX_CURRENT_SCHEMA = vol.Schema(
@@ -138,7 +171,7 @@ SERVICE_SET_MAX_CURRENT_SCHEMA = vol.Schema(
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
         vol.Required("current"): vol.Any(
             vol.Range(min=1, max=255),
-            vol.In(['Maximum', 'maximum', 'Max', 'max', 'Minimum', 'minimum', 'Min', 'min', 'Reduced', 'reduced'])
+            vol.In(["Maximum", "maximum", "Max", "max", "Minimum", "minimum", "Min", "min", "Reduced", "reduced"]),
         ),
     }
 )
@@ -172,12 +205,46 @@ SERVICE_SEND_DESTINATION_SCHEMA = vol.Schema(
 SERVICE_SET_CLIMATER_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): vol.All(cv.string, vol.Length(min=32, max=32)),
-        vol.Required("enabled", default='Start'): vol.In(['Start', 'Stop', 'Set Temp.', 'Auxiliary Start', 'Auxiliary Stop']),
-        vol.Optional("temp"): vol.In([16.0, 16.5, 17.0, 17.5, 18.0, 18.5, 19.0, 19.5, 20.0, 20.5, 21.0, 21.5, 22.0, 22.5, 23.0, 23.5, 
-                                      24.0, 24.5, 25.0, 25.5, 26.0, 26.5, 27.0, 27.5, 28.0, 28,5, 29.0, 29.5, 30.0]), 
-        #vol.Optional("battery_power"): cv.boolean,
-        #vol.Optional("aux_heater"): cv.boolean,
-        #vol.Optional("spin"): vol.All(cv.string, vol.Match(r"^[0-9]{4}$"))
+        vol.Required("enabled", default="Start"): vol.In(
+            ["Start", "Stop", "Set Temp.", "Auxiliary Start", "Auxiliary Stop"]
+        ),
+        vol.Optional("temp"): vol.In(
+            [
+                16.0,
+                16.5,
+                17.0,
+                17.5,
+                18.0,
+                18.5,
+                19.0,
+                19.5,
+                20.0,
+                20.5,
+                21.0,
+                21.5,
+                22.0,
+                22.5,
+                23.0,
+                23.5,
+                24.0,
+                24.5,
+                25.0,
+                25.5,
+                26.0,
+                26.5,
+                27.0,
+                27.5,
+                28.0,
+                28,
+                5,
+                29.0,
+                29.5,
+                30.0,
+            ]
+        ),
+        # vol.Optional("battery_power"): cv.boolean,
+        # vol.Optional("aux_heater"): cv.boolean,
+        # vol.Optional("spin"): vol.All(cv.string, vol.Match(r"^[0-9]{4}$"))
     }
 )
 SERVICE_SET_PHEATER_DURATION_SCHEMA = vol.Schema(
@@ -188,16 +255,17 @@ SERVICE_SET_PHEATER_DURATION_SCHEMA = vol.Schema(
 )
 
 # Set max parallel updates to 2 simultaneous (1 poll and 1 request waiting)
-#PARALLEL_UPDATES = 2
+# PARALLEL_UPDATES = 2
 
 _LOGGER = logging.getLogger(__name__)
-#TOKEN_FILE_NAME_AND_PATH='./custom_components/pycupra/pycupra_token.json'
-FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH='./custom_components/pycupra/pycupra_firebase_credentials_{vin}.json'
-COUNTER_FOR_PERSISTENT_NOTIFICATIONS=0
+# TOKEN_FILE_NAME_AND_PATH='./custom_components/pycupra/pycupra_token.json'
+FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH = "./custom_components/pycupra/pycupra_firebase_credentials_{vin}.json"
+COUNTER_FOR_PERSISTENT_NOTIFICATIONS = 0
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Setup PyCupra component from a config entry."""
-    _LOGGER.debug(f"In async_setup_entry.")
+    _LOGGER.debug("In async_setup_entry.")
     hass.data.setdefault(DOMAIN, {})
 
     if entry.options.get(CONF_SCAN_INTERVAL):
@@ -211,7 +279,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         if not await coordinator.async_login():
-            _LOGGER.debug(f"In async_setup_entry. async_login failed.")
+            _LOGGER.debug("In async_setup_entry. async_login failed.")
             entry.async_start_reauth(hass)
             return False
     except (PyCupraAuthenticationException, PyCupraAccountLockedException, PyCupraLoginFailedException) as e:
@@ -221,9 +289,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.debug(f"In async_setup_entry. Others exceptions. Exception {e}")
         raise ConfigEntryNotReady(e) from e
 
-    entry.async_on_unload(
-        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, coordinator.async_logout)
-    )
+    entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, coordinator.async_logout))
 
     await coordinator.async_refresh()
     if not coordinator.last_update_success:
@@ -231,12 +297,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Get parent device
     try:
-        identifiers={(DOMAIN, entry.unique_id)}
+        identifiers = {(DOMAIN, entry.unique_id)}
         registry = device_registry.async_get(hass)
         device = registry.async_get_device(identifiers)
         # Get user configured name for device
-        name = device.name_by_user if not device.name_by_user is None else None
-    except:
+        name = device.name_by_user if device.name_by_user is not None else None
+    except Exception:
         name = None
 
     data = PyCupraData(entry.data, name, coordinator)
@@ -244,8 +310,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     conf_instruments = entry.data.get(CONF_INSTRUMENTS, {}).copy()
     if entry.options.get(CONF_DEBUG, False) is True:
-        #_LOGGER.debug(f"Configured data: {async_redact_data(entry.data, ['username', 'password', 'vehicle', 'spin'])}") 
-        #_LOGGER.debug(f"Configured options: {async_redact_data(entry.options, ['username', 'password', 'vehicle', 'spin'])}") 
+        # _LOGGER.debug(f"Configured data: {async_redact_data(entry.data, ['username', 'password', 'vehicle', 'spin'])}")
+        # _LOGGER.debug(f"Configured options: {async_redact_data(entry.options, ['username', 'password', 'vehicle', 'spin'])}")
         _LOGGER.debug(f"Resources from options are: {entry.options.get(CONF_RESOURCES, [])}")
         _LOGGER.debug(f"All instruments (data): {conf_instruments}")
     new_instruments = {}
@@ -257,42 +323,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     components = set()
 
     # Check if new instruments
-    for instrument in (
-        instrument
-        for instrument in instruments
-        if not instrument.attr in conf_instruments
-    ):
-            _LOGGER.info(f"Discovered new instrument {instrument.name}")
-            new_instruments[instrument.attr] = instrument.name
+    for instrument in (instrument for instrument in instruments if instrument.attr not in conf_instruments):
+        _LOGGER.info(f"Discovered new instrument {instrument.name}")
+        new_instruments[instrument.attr] = instrument.name
 
     # Update config entry with new instruments
     if len(new_instruments) > 0:
         conf_instruments.update(new_instruments)
         # Prepare data to update config entry with
         update = {
-            'data': {
-                CONF_INSTRUMENTS: dict(sorted(conf_instruments.items(), key=lambda item: item[1]))
-            },
-            'options': {
-                CONF_RESOURCES: entry.options.get(
-                    CONF_RESOURCES,
-                    entry.data.get(CONF_RESOURCES, ['none']))
-            }
+            "data": {CONF_INSTRUMENTS: dict(sorted(conf_instruments.items(), key=lambda item: item[1]))},
+            "options": {CONF_RESOURCES: entry.options.get(CONF_RESOURCES, entry.data.get(CONF_RESOURCES, ["none"]))},
         }
 
         # Enable new instruments if "activate newly enable entitys" is active
-        if hasattr(entry, "pref_disable_new_entities"):
-            if not entry.pref_disable_new_entities:
-                _LOGGER.debug(f"Enabling new instruments {new_instruments}")
-                for item in new_instruments:
-                    update['options'][CONF_RESOURCES].append(item)
+        if hasattr(entry, "pref_disable_new_entities") and not entry.pref_disable_new_entities:
+            _LOGGER.debug(f"Enabling new instruments {new_instruments}")
+            for item in new_instruments:
+                update["options"][CONF_RESOURCES].append(item)
 
         _LOGGER.debug(f"Updating config entry data: {update.get('data')}")
         _LOGGER.debug(f"Updating config entry options: {update.get('options')}")
         hass.config_entries.async_update_entry(
-            entry,
-            data={**entry.data, **update['data']},
-            options={**entry.options, **update['options']}
+            entry, data={**entry.data, **update["data"]}, options={**entry.options, **update["options"]}
         )
 
     for instrument in (
@@ -311,9 +364,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     for component in components:
         coordinator.platforms.append(component)
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setups(entry, components)
-    )
+    hass.async_create_task(hass.config_entries.async_forward_entry_setups(entry, components))
 
     # Service functions
     async def get_car(service_call):
@@ -324,20 +375,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dev_entry = dev_reg.async_get(dev_id)
 
         # Get vehicle VIN from device identifiers
-        seat_identifiers = [
-            identifier
-            for identifier in dev_entry.identifiers
-            if identifier[0] == DOMAIN
-        ]
+        seat_identifiers = [identifier for identifier in dev_entry.identifiers if identifier[0] == DOMAIN]
         vin_identifier = next(iter(seat_identifiers))
         vin = vin_identifier[1]
 
         # Get coordinator handling the device entry
         conf_entry = next(iter(dev_entry.config_entries))
         try:
-            dev_coordinator = hass.data[DOMAIN][conf_entry]['data'].coordinator
-        except:
-            raise PyCupraConfigException('Could not find associated coordinator for given vehicle')
+            dev_coordinator = hass.data[DOMAIN][conf_entry]["data"].coordinator
+        except Exception as err:
+            raise PyCupraConfigException("Could not find associated coordinator for given vehicle") from err
 
         # Return with associated Vehicle class object
         return dev_coordinator.connection.vehicle(vin)
@@ -347,32 +394,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Prepare data
             id = service_call.data.get("id", 0)
-            temp = None
-
             # Convert datetime objects to simple strings or check that strings are correctly formatted
             try:
                 time = service_call.data.get("time").strftime("%H:%M")
-            except:
-                if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
+            except Exception:
+                if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("time", "")):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(  # noqa: B904
+                        f"Invalid time string: {service_call.data.get('time')}"
+                    )
             if service_call.data.get("off_peak_start", False):
                 try:
                     peakstart = service_call.data.get("off_peak_start").strftime("%H:%M")
-                except:
-                    if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get("off_peak_start", "")):
+                except Exception:
+                    if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("off_peak_start", "")):
                         peakstart = service_call.data.get("off_peak_start", "00:00")
                     else:
-                        raise PyCupraInvalidRequestException(f"Invalid value for off peak start hours: {service_call.data.get('off_peak_start')}")
+                        raise PyCupraInvalidRequestException(  # noqa: B904
+                            f"Invalid value for off peak start hours: {service_call.data.get('off_peak_start')}"
+                        )
             if service_call.data.get("off_peak_end", False):
                 try:
                     peakend = service_call.data.get("off_peak_end").strftime("%H:%M")
-                except:
-                    if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get("off_peak_end", "")):
+                except Exception:
+                    if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("off_peak_end", "")):
                         peakend = service_call.data.get("off_peak_end", "00:00")
                     else:
-                        raise PyCupraInvalidRequestException(f"Invalid value for off peak end hours: {service_call.data.get('off_peak_end')}")
+                        raise PyCupraInvalidRequestException(  # noqa: B904
+                            f"Invalid value for off peak end hours: {service_call.data.get('off_peak_end')}"
+                        )
 
             # Convert to parseable data
             schedule = {
@@ -408,21 +459,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_schedule', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_schedule', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'set_schedule', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_schedule', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
-            _LOGGER.info(f'Set departure schedule {id} with data {schedule} for car {car.vin}')
+            _LOGGER.info(f"Set departure schedule {id} with data {schedule} for car {car.vin}")
             if await car.set_timer_schedule(id, schedule) is True:
-                _LOGGER.debug(f"Service call 'set_schedule' executed without error")
+                _LOGGER.debug("Service call 'set_schedule' executed without error")
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_schedule' with data '{service_call}'")
-        except (PyCupraInvalidRequestException) as e:
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_schedule' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_schedule'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_schedule'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_departure_profile_schedule(service_call=None):
@@ -430,16 +491,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Prepare data
             id = service_call.data.get("id", 0)
-            temp = None
-
             # Convert datetime objects to simple strings or check that strings are correctly formatted
             try:
                 time = service_call.data.get("time").strftime("%H:%M")
-            except:
-                if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
+            except Exception:
+                if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("time", "")):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(  # noqa: B904
+                        f"Invalid time string: {service_call.data.get('time')}"
+                    )
 
             # Convert to parseable data
             schedule = {
@@ -456,21 +517,35 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_departure_profile', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_departure_profile', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning(
+                    "Not starting action 'set_departure_profile', because the option 'mutable' is deactivated."
+                )
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_departure_profile', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
-            _LOGGER.info(f'Set departure profile schedule {id} with data {schedule} for car {car.vin}')
+            _LOGGER.info(f"Set departure profile schedule {id} with data {schedule} for car {car.vin}")
             if await car.set_departure_profile_schedule(id, schedule) is True:
-                _LOGGER.debug(f"Service call 'set_departure_profile_schedule' executed without error")
+                _LOGGER.debug("Service call 'set_departure_profile_schedule' executed without error")
                 await coordinator.async_request_refresh()
             else:
-                _LOGGER.warning(f"Failed to execute service call 'set_departure_profile_schedule' with data '{service_call}'")
-        except (PyCupraInvalidRequestException) as e:
+                _LOGGER.warning(
+                    f"Failed to execute service call 'set_departure_profile_schedule' with data '{service_call}'"
+                )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_departure_profile_schedule' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_departure_profile_schedule'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_departure_profile_schedule'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_climatisation_timer_schedule(service_call=None):
@@ -478,16 +553,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Prepare data
             id = service_call.data.get("id", 0)
-            temp = None
-
             # Convert datetime objects to simple strings or check that strings are correctly formatted
             try:
                 time = service_call.data.get("time").strftime("%H:%M")
-            except:
-                if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
+            except Exception:
+                if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("time", "")):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(  # noqa: B904
+                        f"Invalid time string: {service_call.data.get('time')}"
+                    )
 
             # Convert to parseable data
             schedule = {
@@ -498,27 +573,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "time": time,
                 "days": service_call.data.get("days", "nnnnnnn"),
             }
-            #spin = service_call.data.get('spin', None)
+            # spin = service_call.data.get('spin', None)
 
             # Find the correct car and execute service call
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_climatisation_timer', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_climatisation_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning(
+                    "Not starting action 'set_climatisation_timer', because the option 'mutable' is deactivated."
+                )
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_climatisation_timer', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
-            _LOGGER.info(f'Set climatisation timer schedule {id} with data {schedule} for car {car.vin}')
+            _LOGGER.info(f"Set climatisation timer schedule {id} with data {schedule} for car {car.vin}")
             if await car.set_climatisation_timer_schedule(id, schedule) is True:
-                _LOGGER.debug(f"Service call 'set_climatisation_timer_schedule' executed without error")
+                _LOGGER.debug("Service call 'set_climatisation_timer_schedule' executed without error")
                 await coordinator.async_request_refresh()
             else:
-                _LOGGER.warning(f"Failed to execute service call 'set_climatisation_timer_schedule' with data '{service_call}'")
-        except (PyCupraInvalidRequestException) as e:
+                _LOGGER.warning(
+                    f"Failed to execute service call 'set_climatisation_timer_schedule' with data '{service_call}'"
+                )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_climatisation_timer_schedule' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climatisation_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_climatisation_timer'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_auxiliary_heating_timer_schedule(service_call=None):
@@ -526,16 +615,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             # Prepare data
             id = service_call.data.get("id", 0)
-            temp = None
-
             # Convert datetime objects to simple strings or check that strings are correctly formatted
             try:
                 time = service_call.data.get("time").strftime("%H:%M")
-            except:
-                if re.match('^[0-9]{2}:[0-9]{2}$', service_call.data.get('time', '')):
+            except Exception:
+                if re.match("^[0-9]{2}:[0-9]{2}$", service_call.data.get("time", "")):
                     time = service_call.data.get("time", "08:00")
                 else:
-                    raise PyCupraInvalidRequestException(f"Invalid time string: {service_call.data.get('time')}")
+                    raise PyCupraInvalidRequestException(  # noqa: B904
+                        f"Invalid time string: {service_call.data.get('time')}"
+                    )
 
             # Convert to parseable data
             schedule = {
@@ -544,37 +633,58 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "recurring": service_call.data.get("recurring"),
                 "date": service_call.data.get("date"),
                 "time": time,
-                "days": "yyyyyyy", # Recurring auxiliary heating timer, means all days #service_call.data.get("days", "nnnnnnn"),
+                "days": "yyyyyyy",  # Recurring auxiliary heating timer, means all days #service_call.data.get("days", "nnnnnnn"),
             }
-            #spin = service_call.data.get('spin', None)
+            # spin = service_call.data.get('spin', None)
 
             # Find the correct car and execute service call
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_auxiliary_heating_timer', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_auxiliary_heating_timer', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning(
+                    "Not starting action 'set_auxiliary_heating_timer', because the option 'mutable' is deactivated."
+                )
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_auxiliary_heating_timer', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
-            spin = car._dashboard._config.get('spin','') # Using the S-PIN that was entered when setting up the vehicle in pycupra
-            if spin=='':
-                _LOGGER.warning(f'Tried to take SPIN from PyCupra settings for car {car.vin}. But it was empty.')
+            spin = car._dashboard._config.get(
+                "spin", ""
+            )  # Using the S-PIN that was entered when setting up the vehicle in pycupra
+            if spin == "":
+                _LOGGER.warning(f"Tried to take SPIN from PyCupra settings for car {car.vin}. But it was empty.")
             else:
-                _LOGGER.debug(f'SPIN taken from PyCupra settings for car {car.vin}')
-            _LOGGER.info(f'Set auxiliary heating timer schedule {id} with data {schedule} for car {car.vin}')
+                _LOGGER.debug(f"SPIN taken from PyCupra settings for car {car.vin}")
+            _LOGGER.info(f"Set auxiliary heating timer schedule {id} with data {schedule} for car {car.vin}")
             if await car.set_auxiliary_heating_timer_schedule(id, schedule, spin) is True:
-                _LOGGER.debug(f"Service call 'set_auxiliary_heating_timer_schedule' executed without error")
+                _LOGGER.debug("Service call 'set_auxiliary_heating_timer_schedule' executed without error")
                 await coordinator.async_request_refresh()
             else:
-                _LOGGER.warning(f"Failed to execute service call 'set_auxiliary_heating_timer_schedule' with data '{service_call}'")
-        except (PyCupraRequestInProgressException) as e:
+                _LOGGER.warning(
+                    f"Failed to execute service call 'set_auxiliary_heating_timer_schedule' with data '{service_call}'"
+                )
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'set_auxiliary_heating_timer_schedule' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_auxiliary_heating_timer_schedule' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_auxiliary_heating_timer'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def send_destination(service_call=None):
@@ -585,47 +695,62 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             # Get destination data and execute service call
             latitude = service_call.data.get("latitude", 0)
             longitude = service_call.data.get("longitude", 0)
-            destinationName = service_call.data.get("destinationName", '')
-            poiProvider = service_call.data.get("poiProvider", '')
-            street = service_call.data.get("street", '')
-            houseNumber = service_call.data.get("houseNumber", '')
-            city = service_call.data.get("city", '')
-            zipCode = service_call.data.get("zipCode", '')
-            country = service_call.data.get("country", '')
-            stateAbbrevation = service_call.data.get("stateAbbrevation", '')
+            destinationName = service_call.data.get("destinationName", "")
+            poiProvider = service_call.data.get("poiProvider", "")
+            street = service_call.data.get("street", "")
+            houseNumber = service_call.data.get("houseNumber", "")
+            city = service_call.data.get("city", "")
+            zipCode = service_call.data.get("zipCode", "")
+            country = service_call.data.get("country", "")
+            stateAbbrevation = service_call.data.get("stateAbbrevation", "")
             dest = {
-                "poiProvider": poiProvider,                                     	         # poiProvider mandatory
-                "geoCoordinate":{"latitude": latitude,"longitude":longitude},  # geoCoordinate mandatory
-                "destinationName": destinationName
+                "poiProvider": poiProvider,  # poiProvider mandatory
+                "geoCoordinate": {"latitude": latitude, "longitude": longitude},  # geoCoordinate mandatory
+                "destinationName": destinationName,
             }
-            if city != '':
-                dest["address"]= {
-	  "street": street,
-	  "houseNumber": houseNumber,
-	  "city": city,
-	  "zipCode": zipCode,
-	  "country": country,
-	  "stateAbbrevation": stateAbbrevation,
-	  }
+            if city != "":
+                dest["address"] = {
+                    "street": street,
+                    "houseNumber": houseNumber,
+                    "city": city,
+                    "zipCode": zipCode,
+                    "country": country,
+                    "stateAbbrevation": stateAbbrevation,
+                }
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'send_destination', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'send_destination', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'send_destination', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'send_destination', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
             _LOGGER.debug(f"destination dict= {dest}")
             if await car.send_destination(dest) is True:
-                _LOGGER.debug(f"Service call 'send_destination' executed without error")
+                _LOGGER.debug("Service call 'send_destination' executed without error")
             else:
                 _LOGGER.warning(f"Failed to execute service call 'send_destination' with data '{service_call}'")
-        except (PyCupraRequestInProgressException) as e:
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'send_destination' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'send_destination'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'send_destination'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'send_destination' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'send_destination'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'send_destination'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_charge_limit(service_call=None):
@@ -634,25 +759,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_charge_limit', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_charge_limit', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'set_charge_limit', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_charge_limit', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
             # Get charge limit and execute service call
             limit = service_call.data.get("limit", 50)
             if await car.set_charge_limit(limit) is True:
-                _LOGGER.debug(f"Service call 'set_charge_limit' executed without error")
+                _LOGGER.debug("Service call 'set_charge_limit' executed without error")
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_charge_limit' with data '{service_call}'")
-        except (PyCupraRequestInProgressException) as e:
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'set_charge_limit' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_charge_limit' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_charge_limit'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_current(service_call=None):
@@ -661,25 +801,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_current', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_current', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'set_current', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_current', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
             # Get charge current and execute service call
-            current = service_call.data.get('current', None)
+            current = service_call.data.get("current", None)
             if await car.set_charger_current(current) is True:
-                _LOGGER.debug(f"Service call 'set_current' executed without error")
+                _LOGGER.debug("Service call 'set_current' executed without error")
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_current' with data '{service_call}'")
-        except (PyCupraRequestInProgressException) as e:
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'set_current' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_current'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_current'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_current' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_current'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_current'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_target_soc(service_call=None):
@@ -688,25 +843,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_target_soc', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_target_soc', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'set_target_soc', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_target_soc', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
             # Get charge current and execute service call
-            targetSoc = service_call.data.get('targetSoc', None)
+            targetSoc = service_call.data.get("targetSoc", None)
             if await car.set_charger_target_soc(targetSoc) is True:
-                _LOGGER.debug(f"Service call 'set_target_soc' executed without error")
+                _LOGGER.debug("Service call 'set_target_soc' executed without error")
                 await coordinator.async_request_refresh()
             else:
                 _LOGGER.warning(f"Failed to execute service call 'set_target_soc' with data '{service_call}'")
-        except (PyCupraRequestInProgressException) as e:
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'set_target_soc' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_target_soc' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_target_soc'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_pheater_duration(service_call=None):
@@ -715,18 +885,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_pheater_duration', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_pheater_duration', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning(
+                    "Not starting action 'set_pheater_duration', because the option 'mutable' is deactivated."
+                )
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_pheater_duration', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
             car.pheater_duration = service_call.data.get("duration", car.pheater_duration)
-            _LOGGER.debug(f"Service call 'set_pheater_duration' executed without error")
+            _LOGGER.debug("Service call 'set_pheater_duration' executed without error")
             await coordinator.async_request_refresh()
-        except (PyCupraInvalidRequestException) as e:
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_pheater_duration' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_pheater_duration'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_pheater_duration'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     async def set_climater(service_call=None):
@@ -735,124 +917,116 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             car = await get_car(service_call)
 
             # If option 'mutable' is deactivated, then this action shall not be performed
-            if not car._dashboard._config.get('mutable', False):
-                _LOGGER.warning(f"Not starting action 'set_climater', because the option \'mutable\' is deactivated.")
-                async_show_pycupra_notification(hass, f"Not starting action 'set_climater', because the option 'mutable' is deactivated.", title="Option mutable deactivated", id="PyCupra_mutable")
+            if not car._dashboard._config.get("mutable", False):
+                _LOGGER.warning("Not starting action 'set_climater', because the option 'mutable' is deactivated.")
+                async_show_pycupra_notification(
+                    hass,
+                    "Not starting action 'set_climater', because the option 'mutable' is deactivated.",
+                    title="Option mutable deactivated",
+                    id="PyCupra_mutable",
+                )
                 return
 
-            temp = service_call.data.get('temp', None)
-            if service_call.data.get('enabled', None):
-                if service_call.data.get('enabled', None)=='Set Temp.':
-                    action = 'settings'
-                elif service_call.data.get('enabled', None)=='Start':
-                    action = 'electric'
-                elif service_call.data.get('enabled', None)=='Auxiliary Start':
-                    action = 'auxiliary_start'
-                elif service_call.data.get('enabled', None)=='Auxiliary Stop':
-                    action = 'auxiliary_stop'
+            temp = service_call.data.get("temp", None)
+            if service_call.data.get("enabled", None):
+                if service_call.data.get("enabled", None) == "Set Temp.":
+                    action = "settings"
+                elif service_call.data.get("enabled", None) == "Start":
+                    action = "electric"
+                elif service_call.data.get("enabled", None) == "Auxiliary Start":
+                    action = "auxiliary_start"
+                elif service_call.data.get("enabled", None) == "Auxiliary Stop":
+                    action = "auxiliary_stop"
                 else:
-                    action = 'off'
-                    #temp = hvpower = spin = None
-                #hvpower = service_call.data.get('battery_power', None)
-                #spin = service_call.data.get('spin', None)
+                    action = "off"
+                    # temp = hvpower = spin = None
+                # hvpower = service_call.data.get('battery_power', None)
+                # spin = service_call.data.get('spin', None)
 
                 # Execute service call
                 _LOGGER.debug(f"Action 'set_climater' with the following parameters: action={action} and temp={temp}.")
-                #_LOGGER.debug(f"Action 'set_climater' with the following parameters: action={action}, temp={temp} and spin={spin}.")
-                if action=='settings':
-                    if temp!=None:
-                        #if await car.set_climatisation_temp(temp) is True:
-                        if await car.set_climatisation_one_setting('targetTemperatureInCelsius', temp) is True:
-                            _LOGGER.debug(f"Service call 'set_climater' executed without error")
+                # _LOGGER.debug(f"Action 'set_climater' with the following parameters: action={action}, temp={temp} and spin={spin}.")
+                if action == "settings":
+                    if temp is not None:
+                        # if await car.set_climatisation_temp(temp) is True:
+                        if await car.set_climatisation_one_setting("targetTemperatureInCelsius", temp) is True:
+                            _LOGGER.debug("Service call 'set_climater' executed without error")
                             await coordinator.async_request_refresh()
                         else:
                             _LOGGER.warning(f"Failed to execute service call 'set_climater' with data '{service_call}'")
                     else:
-                        _LOGGER.warning(f"Failed to execute service call 'set_climater' because temperature parameter not set.'")
+                        _LOGGER.warning(
+                            "Failed to execute service call 'set_climater' because temperature parameter not set.'"
+                        )
                 else:
                     spin = None
-                    if action == 'auxiliary_start':
-                        spin = car._dashboard._config.get('spin','') # Using the S-PIN that was entered when setting up the vehicle in pycupra
-                        if spin=='':
-                            _LOGGER.warning(f'Tried to take SPIN from PyCupra settings for car {car.vin}. But it was empty.')
+                    if action == "auxiliary_start":
+                        spin = car._dashboard._config.get(
+                            "spin", ""
+                        )  # Using the S-PIN that was entered when setting up the vehicle in pycupra
+                        if spin == "":
+                            _LOGGER.warning(
+                                f"Tried to take SPIN from PyCupra settings for car {car.vin}. But it was empty."
+                            )
                         else:
-                            _LOGGER.debug(f'SPIN taken from PyCupra settings for car {car.vin}')
+                            _LOGGER.debug(f"SPIN taken from PyCupra settings for car {car.vin}")
                     if await car.set_climatisation(action, temp, hvpower=None, spin=spin) is True:
-                        _LOGGER.debug(f"Service call 'set_climater' executed without error")
+                        _LOGGER.debug("Service call 'set_climater' executed without error")
                         await coordinator.async_request_refresh()
                     else:
                         _LOGGER.warning(f"Failed to execute service call 'set_climater' with data '{service_call}'")
             else:
-                _LOGGER.warning(f"Service call 'set_climater' without valid action parameter")
-        except (PyCupraRequestInProgressException) as e:
+                _LOGGER.warning("Service call 'set_climater' without valid action parameter")
+        except PyCupraRequestInProgressException as e:
             _LOGGER.warning(f"Service call 'set_climater' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climater'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except (PyCupraInvalidRequestException) as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_climater'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except PyCupraInvalidRequestException as e:
             _LOGGER.warning(f"Service call 'set_climater' failed {e}")
-            async_show_pycupra_notification(hass, f"An error occurred, while trying to execute action 'set_climater'. Error: {e}", title="Action error", id="PyCupra_action_error")
-        except Exception as e:
+            async_show_pycupra_notification(
+                hass,
+                f"An error occurred, while trying to execute action 'set_climater'. Error: {e}",
+                title="Action error",
+                id="PyCupra_action_error",
+            )
+        except Exception:
             raise
 
     # Register services
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_SCHEDULE,
-        set_schedule,
-        schema = SERVICE_SET_SCHEDULE_SCHEMA
-    )
+    hass.services.async_register(DOMAIN, SERVICE_SET_SCHEDULE, set_schedule, schema=SERVICE_SET_SCHEDULE_SCHEMA)
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE,
         set_departure_profile_schedule,
-        schema = SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE_SCHEMA
+        schema=SERVICE_SET_DEPARTURE_PROFILE_SCHEDULE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE,
         set_climatisation_timer_schedule,
-        schema = SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE_SCHEMA
+        schema=SERVICE_SET_CLIMATISATION_TIMER_SCHEDULE_SCHEMA,
     )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE,
         set_auxiliary_heating_timer_schedule,
-        schema = SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE_SCHEMA
+        schema=SERVICE_SET_AUXILIARY_HEATING_TIMER_SCHEDULE_SCHEMA,
+    )
+    hass.services.async_register(DOMAIN, SERVICE_SET_MAX_CURRENT, set_current, schema=SERVICE_SET_MAX_CURRENT_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SET_TARGET_SOC, set_target_soc, schema=SERVICE_SET_TARGET_SOC_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_CHARGE_LIMIT, set_charge_limit, schema=SERVICE_SET_CHARGE_LIMIT_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_MAX_CURRENT,
-        set_current,
-        schema = SERVICE_SET_MAX_CURRENT_SCHEMA
+        DOMAIN, SERVICE_SEND_DESTINATION, send_destination, schema=SERVICE_SEND_DESTINATION_SCHEMA
     )
+    hass.services.async_register(DOMAIN, SERVICE_SET_CLIMATER, set_climater, schema=SERVICE_SET_CLIMATER_SCHEMA)
     hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_TARGET_SOC,
-        set_target_soc,
-        schema = SERVICE_SET_TARGET_SOC_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_CHARGE_LIMIT,
-        set_charge_limit,
-        schema = SERVICE_SET_CHARGE_LIMIT_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SEND_DESTINATION,
-        send_destination,
-        schema = SERVICE_SEND_DESTINATION_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_CLIMATER,
-        set_climater,
-        schema = SERVICE_SET_CLIMATER_SCHEMA
-    )
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_SET_PHEATER_DURATION,
-        set_pheater_duration,
-        schema = SERVICE_SET_PHEATER_DURATION_SCHEMA
+        DOMAIN, SERVICE_SET_PHEATER_DURATION, set_pheater_duration, schema=SERVICE_SET_PHEATER_DURATION_SCHEMA
     )
 
     return True
@@ -860,9 +1034,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 def update_callback(hass, coordinator):
     _LOGGER.debug("CALLBACK!")
-    hass.async_create_task(
-        coordinator.async_request_refresh()
-    )
+    hass.async_create_task(coordinator.async_request_refresh())
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -942,17 +1114,21 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry):
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate configuration from old version to new."""
-    _LOGGER.info(f'Migrating from version {entry.version}')
+    _LOGGER.info(f"Migrating from version {entry.version}")
 
     # Migrate data from version 1
     if entry.version == 1:
-        _LOGGER.warning("Found config data in version %s.%s. This is unexpected. Trying to convert them.", entry.version, entry.minor_version)
+        _LOGGER.warning(
+            "Found config data in version %s.%s. This is unexpected. Trying to convert them.",
+            entry.version,
+            entry.minor_version,
+        )
         # Make a copy of old config
         new_data = {**entry.data}
 
         # Convert from minutes to seconds for poll interval
         minutes = entry.options.get("update_interval", 1)
-        seconds = minutes*60
+        seconds = minutes * 60
         new_data.pop("update_interval", None)
         new_data[CONF_SCAN_INTERVAL] = seconds
 
@@ -976,6 +1152,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info("Migration to version %s.%s successful", entry.version, entry.minor_version)
     return True
 
+
 class PyCupraData:
     """Hold component state."""
 
@@ -992,14 +1169,8 @@ class PyCupraData:
         return next(
             (
                 instrument
-                for instrument in (
-                    self.coordinator.data
-                    if self.coordinator is not None
-                    else self.instruments
-                )
-                if instrument.vehicle.vin == vin
-                and instrument.component == component
-                and instrument.attr == attr
+                for instrument in (self.coordinator.data if self.coordinator is not None else self.instruments)
+                if instrument.vehicle.vin == vin and instrument.component == component and instrument.attr == attr
             ),
             None,
         )
@@ -1008,10 +1179,9 @@ class PyCupraData:
         """Provide a friendly name for a vehicle."""
         try:
             # Return name if configured by user
-            if isinstance(self.name, str):
-                if len(self.name) > 0:
-                    return self.name
-        except:
+            if isinstance(self.name, str) and len(self.name) > 0:
+                return self.name
+        except Exception:
             pass
 
         # Default name to nickname if supported, else vin number
@@ -1020,8 +1190,8 @@ class PyCupraData:
                 return vehicle.nickname
             elif vehicle.vin:
                 return vehicle.vin
-        except:
-            _LOGGER.info(f"Name set to blank")
+        except Exception:
+            _LOGGER.info("Name set to blank")
             return ""
 
 
@@ -1053,22 +1223,16 @@ class PyCupraEntity(Entity):
         if not self.enabled:
             return
 
-        #_LOGGER.debug(f"In PyCupraEntity.async_updata. For instrument with name={self.instrument.name}, attr={self.instrument.attr}")
+        # _LOGGER.debug(f"In PyCupraEntity.async_updata. For instrument with name={self.instrument.name}, attr={self.instrument.attr}")
         await self.coordinator.update_only_selected_entity(self.instrument)
-        #await self.coordinator.async_request_refresh()
+        # await self.coordinator.async_request_refresh()
 
     async def async_added_to_hass(self):
         """Register update dispatcher."""
         if self.coordinator is not None:
-            self.async_on_remove(
-                self.coordinator.async_add_listener(self.async_write_ha_state)
-            )
+            self.async_on_remove(self.coordinator.async_add_listener(self.async_write_ha_state))
         else:
-            self.async_on_remove(
-                async_dispatcher_connect(
-                    self.hass, SIGNAL_STATE_UPDATED, self.async_write_ha_state
-                )
-            )
+            self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_STATE_UPDATED, self.async_write_ha_state))
 
     @property
     def instrument(self):
@@ -1078,9 +1242,15 @@ class PyCupraEntity(Entity):
     @property
     def icon(self):
         """Return the icon."""
-        if self.instrument.attr in ["battery_level", "charging",  "charging_state", "charging_time_left", "charging_estimated_end_time"]:
+        if self.instrument.attr in [
+            "battery_level",
+            "charging",
+            "charging_state",
+            "charging_time_left",
+            "charging_estimated_end_time",
+        ]:
             return icon_for_battery_level(battery_level=self.vehicle.battery_level, charging=self.vehicle.charging)
-        #if self.instrument.attr in ["climatisation_time_left", "climatisation_estimated_end_time"]:
+        # if self.instrument.attr in ["climatisation_time_left", "climatisation_estimated_end_time"]:
         #    if self.vehicle.electric_climatisation:
         #        return "mdi:radiator"
         #    else:
@@ -1120,7 +1290,9 @@ class PyCupraEntity(Entity):
         """Return extra state attributes."""
         attributes = dict(
             self.instrument.attributes,
-            model=f"{self.vehicle.model}/{self.vehicle.model_year}" if (self.vehicle.model_year!='unknown') else f"{self.vehicle.model}",
+            model=f"{self.vehicle.model}/{self.vehicle.model_year}"
+            if (self.vehicle.model_year != "unknown")
+            else f"{self.vehicle.model}",
         )
 
         # Return model image as picture attribute for position entity
@@ -1165,10 +1337,10 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         self.entry = entry
         self.platforms = []
         self.report_last_updated = None
-        self._logPrefix=self.entry.options.get(CONF_LOGPREFIX, self.entry.data.get(CONF_LOGPREFIX, None))
-        if self._logPrefix=='' or self._logPrefix==' ':
+        self._logPrefix = self.entry.options.get(CONF_LOGPREFIX, self.entry.data.get(CONF_LOGPREFIX, None))
+        if self._logPrefix == "" or self._logPrefix == " ":
             _LOGGER.debug(f"Config entry for logPrefix='{self._logPrefix}'. Treating it as None.")
-            self._logPrefix=None
+            self._logPrefix = None
         _LOGGER.debug(f"In PyCupraCoord.Init: logPrefix={self._logPrefix}")
         self.connection = Connection(
             session=async_get_clientsession(hass),
@@ -1176,9 +1348,11 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             username=self.entry.data[CONF_USERNAME],
             password=self.entry.data[CONF_PASSWORD],
             fulldebug=self.entry.options.get(CONF_DEBUG, self.entry.data.get(CONF_DEBUG, DEFAULT_DEBUG)),
-            nightlyUpdateReduction=self.entry.options.get(CONF_NIGHTLY_UPDATE_REDUCTION, self.entry.data.get(CONF_NIGHTLY_UPDATE_REDUCTION, False)),
+            nightlyUpdateReduction=self.entry.options.get(
+                CONF_NIGHTLY_UPDATE_REDUCTION, self.entry.data.get(CONF_NIGHTLY_UPDATE_REDUCTION, False)
+            ),
             logPrefix=self._logPrefix,
-            hass=hass
+            hass=hass,
         )
         self._euda = self.entry.options.get(CONF_EUDA, self.entry.data.get(CONF_EUDA, False))
         if self._euda:
@@ -1189,9 +1363,9 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 password=self.entry.data[CONF_PASSWORD],
                 fulldebug=self.entry.options.get(CONF_DEBUG, self.entry.data.get(CONF_DEBUG, DEFAULT_DEBUG)),
                 logPrefix=self._logPrefix,
-                hass=hass
+                hass=hass,
             )
-        self.firebaseWanted=self.entry.options.get(CONF_FIREBASE, self.entry.data.get(CONF_FIREBASE, False))
+        self.firebaseWanted = self.entry.options.get(CONF_FIREBASE, self.entry.data.get(CONF_FIREBASE, False))
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=update_interval)
 
     async def _async_update_data(self):
@@ -1201,7 +1375,7 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             raise UpdateFailed("No vehicles found.")
 
         if self._euda and not eudaVehicle:
-            _LOGGER.error(f"No eudaVehicles found")
+            _LOGGER.error("No eudaVehicles found")
 
         dashboard = vehicle.dashboard(
             mutable=self.entry.options.get(CONF_MUTABLE),
@@ -1220,8 +1394,10 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             if self._euda:
                 await self.eudaConnection.terminate()
                 self.eudaConnection = None
-        except Exception as ex:
-            _LOGGER.error("Failed to log out and revoke tokens for Cupra/Seat portal. Some tokens might still be valid.")
+        except Exception:
+            _LOGGER.error(
+                "Failed to log out and revoke tokens for Cupra/Seat portal. Some tokens might still be valid."
+            )
             return False
         return True
 
@@ -1229,7 +1405,7 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         """Login to Cupra/Seat portal"""
         # Check if we can login
         try:
-            #if await self.connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH) is False:
+            # if await self.connection.doLogin(tokenFile=TOKEN_FILE_NAME_AND_PATH) is False:
             if await self.connection.doLogin() is False:
                 _LOGGER.warning(
                     "Could not login to Cupra/Seat portal, please check your credentials and verify that the service is working"
@@ -1238,31 +1414,42 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             # Get associated vehicles before we continue
             await self.connection.get_vehicles()
             vehicle = self.connection.vehicle(self.vin)
-            if vehicle == None:
-                _LOGGER.warning(f"PyCupraCoordinator.async_login() called. But vehicle with VIN ending on '{self.vin[-4:]}' was not found.")
+            if vehicle is None:
+                _LOGGER.warning(
+                    f"PyCupraCoordinator.async_login() called. But vehicle with VIN ending on '{self.vin[-4:]}' was not found."
+                )
             elif vehicle.deactivated:
-                _LOGGER.warning(f"Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem.")
-                async_show_pycupra_notification(self.hass, f"Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem.", title="Vehicle offline", id="PyCupra_vehicle_offline_error")
+                _LOGGER.warning(
+                    "Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem."
+                )
+                async_show_pycupra_notification(
+                    self.hass,
+                    "Vehicle is offline or API endpoint not responding during initialisation process. Continuing, but a lot of device entities will be unavailable. Better to check your vehicle and reload the device after solving the problem.",
+                    title="Vehicle offline",
+                    id="PyCupra_vehicle_offline_error",
+                )
 
-            if self._euda:    
+            if self._euda:
                 if await self.eudaConnection.doLogin() is False:
                     _LOGGER.error(
                         "Could not login to EUDA portal, please check your credentials and verify that the service is working"
                     )
                     return False
-                _LOGGER.debug('called eudaConnection.do_login')
+                _LOGGER.debug("called eudaConnection.do_login")
                 # Get associated eudaVehicles before we continue
                 await self.eudaConnection.getVehicles()
                 loop = asyncio.get_running_loop()
                 if not await loop.run_in_executor(None, self.eudaConnection.readTripStatisticsFile):
-                    _LOGGER.warning('readTripStatisticsFile was not successful. Is there no file? Ignoring this problem.')
+                    _LOGGER.warning(
+                        "readTripStatisticsFile was not successful. Is there no file? Ignoring this problem."
+                    )
 
             return True
         except (PyCupraAccountLockedException, PyCupraAuthenticationException) as e:
-            _LOGGER.error('In async_login.except. Exception:', e)
+            _LOGGER.error("In async_login.except. Exception:", e)
             # Raise auth failed error in config flow
-            raise 
-        except:
+            raise
+        except Exception:
             raise
 
     async def update(self) -> Vehicle:
@@ -1271,29 +1458,46 @@ class PyCupraCoordinator(DataUpdateCoordinator):
         # Update vehicle data
         _LOGGER.debug("Updating data from Cupra/Seat API")
         try:
-            eudaVehicle= None
+            eudaVehicle = None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
-            if vehicle == None:
-                _LOGGER.warning(f"PyCupraCoordinator.update() called. But vehicle is none.")
+            if vehicle is None:
+                _LOGGER.warning("PyCupraCoordinator.update() called. But vehicle is none.")
                 rc1 = False
             else:
                 if self.firebaseWanted:
-                    newStatus = await vehicle.initialiseFirebase(firebaseCredentialsFileName=FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH, updateCallback=self.updateCallbackForNotifications)
-                    #_LOGGER.debug(f"New status of firebase={newStatus}")
+                    await vehicle.initialiseFirebase(
+                        firebaseCredentialsFileName=FIREBASE_CREDENTIALS_FILE_NAME_AND_PATH,
+                        updateCallback=self.updateCallbackForNotifications,
+                    )
+                    # _LOGGER.debug(f"New status of firebase={newStatus}")
                 rc1 = await vehicle.update()
             rc2 = True
             if self._euda:
                 eudaVehicle = self.eudaConnection.vehicle(self.vin)
-                if self.eudaConnection._loginError == None:
+                if self.eudaConnection._loginError is None:
                     try:
                         rc2 = await self.eudaConnection.update()
-                        if self.eudaConnection._loginError != None:
-                            _LOGGER.error(f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}")
-                            async_show_pycupra_notification(self.hass, f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.", title="EUDA connection failed", id="PyCupra_euda_error")
-                    except Exception as e:
-                        _LOGGER.error(f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}")
-                        async_show_pycupra_notification(self.hass, f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.", title="EUDA connection failed", id="PyCupra_euda_error")
+                        if self.eudaConnection._loginError is not None:
+                            _LOGGER.error(
+                                f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}"
+                            )
+                            async_show_pycupra_notification(
+                                self.hass,
+                                f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.",
+                                title="EUDA connection failed",
+                                id="PyCupra_euda_error",
+                            )
+                    except Exception:
+                        _LOGGER.error(
+                            f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}"
+                        )
+                        async_show_pycupra_notification(
+                            self.hass,
+                            f"An error occurred in update of EU data act data. Error: {self.eudaConnection._loginError}. If you think, it should work again, reload your PyCupra device.",
+                            title="EUDA connection failed",
+                            id="PyCupra_euda_error",
+                        )
                 else:
                     rc2 = False
             if rc1 and rc2:
@@ -1305,26 +1509,30 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning("Could not update from EUDA API. Continuing with old data")
                 return vehicle, eudaVehicle
         except Exception as error:
-            _LOGGER.warning(f"An error occured while requesting update from Cupra/Seat API: {error}. Continuing with old vehicle data")
+            _LOGGER.warning(
+                f"An error occured while requesting update from Cupra/Seat API: {error}. Continuing with old vehicle data"
+            )
             return vehicle, eudaVehicle
 
-    async def updateCallbackForNotifications(self, updateType=0) -> Union[bool, Vehicle]:
+    async def updateCallbackForNotifications(self, updateType=0) -> bool | Vehicle:
         """Update status from API (called for notifications)"""
 
         # Update vehicle data
         _LOGGER.debug("Due to push notification, call for update of data from Cupra/Seat API")
         try:
-            eudaVehicle= None
+            eudaVehicle = None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
-            if vehicle._haNotification != None:
-                async_show_pycupra_notification(self.hass, vehicle._haNotification, title="Request failed", id="PyCupra_request_failed")
+            if vehicle._haNotification is not None:
+                async_show_pycupra_notification(
+                    self.hass, vehicle._haNotification, title="Request failed", id="PyCupra_request_failed"
+                )
                 vehicle.clearHANotification()
             rc1 = await vehicle.update()
             rc2 = True
             if self._euda:
                 eudaVehicle = self.eudaConnection.vehicle(self.vin)
-                #rc2 = await self.eudaConnection.update() # commented out, because calling self.eudaConnection.update() during "normal" updates should be sufficient
+                # rc2 = await self.eudaConnection.update() # commented out, because calling self.eudaConnection.update() during "normal" updates should be sufficient
             if rc1 and rc2:
                 dashboard = vehicle.dashboard(
                     mutable=self.entry.options.get(CONF_MUTABLE),
@@ -1340,30 +1548,53 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning("Could not update from EUDA API. Continuing with old data")
                 return False
         except Exception as error:
-            _LOGGER.warning(f"An error occured in updateCallbackForNotifications while requesting update from Cupra/Seat API: {error}")
+            _LOGGER.warning(
+                f"An error occured in updateCallbackForNotifications while requesting update from Cupra/Seat API: {error}"
+            )
             return False
 
-    async def update_only_selected_entity(self, whichInstrument) -> Union[bool, Vehicle]:
+    async def update_only_selected_entity(self, whichInstrument) -> bool | Vehicle:
         """Update position from My Cupra"""
 
         # Update vehicle data
         try:
-            eudaVehicle= None
+            eudaVehicle = None
             # Get Vehicle object matching VIN number
             vehicle = self.connection.vehicle(self.vin)
             if self._euda:
                 eudaVehicle = self.eudaConnection.vehicle(self.vin)
-            if whichInstrument.attr == 'position':
+            if whichInstrument.attr == "position":
                 _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
                 rc = await vehicle.get_position()
-            elif whichInstrument.attr in ('door_locked', 'door_closed_left_front', 'door_closed_right_front', 'door_closed_left_back', 'door_closed_right_back', 'trunk_locked', 'trunk_closed', 
-                                          'hood_closed', 'windows_closed', 'window_closed_left_front', 'window_closed_left_back', 'window_closed_right_front', 'window_closed_right_back'):
-                if (vehicle._last_get_statusreport < datetime.now(tz=None) - timedelta(seconds= 30)):
+            elif whichInstrument.attr in (
+                "door_locked",
+                "door_closed_left_front",
+                "door_closed_right_front",
+                "door_closed_left_back",
+                "door_closed_right_back",
+                "trunk_locked",
+                "trunk_closed",
+                "hood_closed",
+                "windows_closed",
+                "window_closed_left_front",
+                "window_closed_left_back",
+                "window_closed_right_front",
+                "window_closed_right_back",
+            ):
+                if vehicle._last_get_statusreport < datetime.now(tz=None) - timedelta(seconds=30):
                     _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
                     rc = await vehicle.get_statusreport()
                 else:
-                    _LOGGER.info(f"Last API call to update the state of {whichInstrument.attr} less than 30 seconds ago. Not performing a new API call.")
-            elif whichInstrument.attr in ('electric_range', 'combustion_range', 'combined_range', 'battery_level', 'fuel_level'):
+                    _LOGGER.info(
+                        f"Last API call to update the state of {whichInstrument.attr} less than 30 seconds ago. Not performing a new API call."
+                    )
+            elif whichInstrument.attr in (
+                "electric_range",
+                "combustion_range",
+                "combined_range",
+                "battery_level",
+                "fuel_level",
+            ):
                 _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
                 rc = await vehicle.get_basiccardata()
             else:
@@ -1381,25 +1612,27 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 _LOGGER.warning(f"Could not query {whichInstrument.attr} from Cupra/Seat API")
                 return False
         except Exception as error:
-            _LOGGER.warning(f"An error occured while requesting update for {whichInstrument.attr} from Cupra/Seat API: {error}")
+            _LOGGER.warning(
+                f"An error occured while requesting update for {whichInstrument.attr} from Cupra/Seat API: {error}"
+            )
             return False
 
-def async_show_pycupra_notification(hass: HomeAssistant, message, title=None, id= None):
+
+def async_show_pycupra_notification(hass: HomeAssistant, message, title=None, id=None):
     """show a notification for pycupra messages"""
     async_pn_create(hass, message, title=title, notification_id=id)
     global COUNTER_FOR_PERSISTENT_NOTIFICATIONS
-    COUNTER_FOR_PERSISTENT_NOTIFICATIONS = COUNTER_FOR_PERSISTENT_NOTIFICATIONS +1
-    if id:
-        if not ('failed' in id or 'error' in id):
-            hass.async_create_task(
-                async_sleep_and_dismiss_pycupra_notification(hass, id, COUNTER_FOR_PERSISTENT_NOTIFICATIONS)
-            )
+    COUNTER_FOR_PERSISTENT_NOTIFICATIONS = COUNTER_FOR_PERSISTENT_NOTIFICATIONS + 1
+    if id and not ("failed" in id or "error" in id):
+        hass.async_create_task(
+            async_sleep_and_dismiss_pycupra_notification(hass, id, COUNTER_FOR_PERSISTENT_NOTIFICATIONS)
+        )
+
 
 async def async_sleep_and_dismiss_pycupra_notification(hass: HomeAssistant, id, counter):
     """wait 2 minutes and then dismiss notification"""
     await asyncio.sleep(120)
     global COUNTER_FOR_PERSISTENT_NOTIFICATIONS
-    if counter==COUNTER_FOR_PERSISTENT_NOTIFICATIONS:
+    if counter == COUNTER_FOR_PERSISTENT_NOTIFICATIONS:
         _LOGGER.debug("Dismissing open pycupra notification")
         async_pn_dismiss(hass, notification_id=id)
-

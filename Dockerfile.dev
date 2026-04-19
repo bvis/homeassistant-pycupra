@@ -1,0 +1,23 @@
+ARG PYTHON_VERSION=3.12
+FROM python:${PYTHON_VERSION}-slim
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml ./
+RUN pip install --no-cache-dir \
+    ruff \
+    mypy \
+    pytest \
+    pytest-asyncio \
+    pytest-homeassistant-custom-component \
+    voluptuous \
+    pycupra
+
+COPY . .
+
+CMD ["make", "check"]
