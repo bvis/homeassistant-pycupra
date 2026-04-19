@@ -1,5 +1,5 @@
 -r requirements.txt
-homeassistant>=2025.5.0
+homeassistant>=2025.1.0
 ruff>=0.11.0
 mypy>=1.15.0
 pytest>=8.0.0
