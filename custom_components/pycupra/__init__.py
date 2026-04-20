@@ -112,8 +112,7 @@ SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
                 27.0,
                 27.5,
                 28.0,
-                28,
-                5,
+                28.5,
                 29.0,
                 29.5,
                 30.0,
@@ -235,8 +234,7 @@ SERVICE_SET_CLIMATER_SCHEMA = vol.Schema(
                 27.0,
                 27.5,
                 28.0,
-                28,
-                5,
+                28.5,
                 29.0,
                 29.5,
                 30.0,
@@ -1564,8 +1562,17 @@ class PyCupraCoordinator(DataUpdateCoordinator):
             if self._euda:
                 eudaVehicle = self.eudaConnection.vehicle(self.vin)
             if whichInstrument.attr == "position":
-                _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
-                rc = await vehicle.get_position()
+                try:
+                    skip = vehicle._last_get_position >= datetime.now(tz=None) - timedelta(seconds=30)
+                except AttributeError:
+                    skip = False
+                if not skip:
+                    _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
+                    rc = await vehicle.get_position()
+                else:
+                    _LOGGER.info(
+                        f"Last API call to update the state of {whichInstrument.attr} less than 30 seconds ago. Not performing a new API call."
+                    )
             elif whichInstrument.attr in (
                 "door_locked",
                 "door_closed_left_front",
@@ -1595,8 +1602,17 @@ class PyCupraCoordinator(DataUpdateCoordinator):
                 "battery_level",
                 "fuel_level",
             ):
-                _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
-                rc = await vehicle.get_basiccardata()
+                try:
+                    skip = vehicle._last_get_basiccardata >= datetime.now(tz=None) - timedelta(seconds=30)
+                except AttributeError:
+                    skip = False
+                if not skip:
+                    _LOGGER.debug(f"Update for selected entity. Instrument {whichInstrument.attr}")
+                    rc = await vehicle.get_basiccardata()
+                else:
+                    _LOGGER.info(
+                        f"Last API call to update the state of {whichInstrument.attr} less than 30 seconds ago. Not performing a new API call."
+                    )
             else:
                 _LOGGER.warning(f"Selective update for instrument {whichInstrument.attr} not implemented yet.")
                 return False
