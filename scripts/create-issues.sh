@@ -71,7 +71,7 @@ gh issue create --repo "$REPO" \
 
 \`API_WARNINGLIGHTS\` ya se llama pero todo se agrupa en un sensor \`warnings\`.
 - Desglosar en binary_sensors individuales (aceite, frenos, batería 12V, etc.)
-- Migrar a endpoint v3: \`/v3/vehicles/{vin}/warninglights\` (confirmado en APK)"
+- Migrar a endpoint v3: \`/v3/vehicles/{vin}/warninglights\` "
 
 # Phase 2: Energy Dashboard
 gh issue create --repo "$REPO" \
@@ -99,8 +99,7 @@ Usar \`homeassistant.helpers.issue_registry\` para surfacear en el panel Repairs
 # Phase 3: Battery Care
 gh issue create --repo "$REPO" \
   --title "feat: Battery Care control" \
-  --body "## Phase 3 — Battery Care (API confirmada por APK)
-
+  --body "## Phase 3 — Battery Care
 Endpoints confirmados:
 - GET \`/v1/vehicles/{vin}/charging/battery-care\`
 - GET \`/v1/vehicles/{vin}/charging/battery-care/target\`
@@ -112,8 +111,7 @@ Servicio: \`set_battery_care_target\`"
 # Phase 3: Vehicle Wakeup
 gh issue create --repo "$REPO" \
   --title "feat: Explicit vehicle wakeup button" \
-  --body "## Phase 3 — Vehicle Wakeup (API confirmada por APK)
-
+  --body "## Phase 3 — Vehicle Wakeup
 Endpoint: POST \`/v1/vehicles/{vin}/vehicle-wakeup/request\`
 - Botón dedicado en vez del refresh actual
 - Más limpio y explícito"
@@ -121,8 +119,7 @@ Endpoint: POST \`/v1/vehicles/{vin}/vehicle-wakeup/request\`
 # Phase 3: Independent Ventilation
 gh issue create --repo "$REPO" \
   --title "feat: Independent ventilation control" \
-  --body "## Phase 3 — Ventilación Independiente (API confirmada por APK)
-
+  --body "## Phase 3 — Ventilación Independiente
 Endpoints:
 - POST \`v1/vehicles/{vin}/ventilation/start\`
 - POST \`v1/vehicles/{vin}/ventilation/stop\`
@@ -133,8 +130,7 @@ Separar ventilación de climatización. Climate entity o switch dedicado."
 # Phase 3: Driving Data Reports
 gh issue create --repo "$REPO" \
   --title "feat: Driving data reports (short/long/cyclic)" \
-  --body "## Phase 3 — Driving Data Reports (API confirmada por APK)
-
+  --body "## Phase 3 — Driving Data Reports
 Endpoint: GET \`/v2/vehicles/{vin}/driving-data/{intervalType}\`
 - intervalType: short, long, cyclic
 - Sensores: avg speed, avg consumption, distance, duration por intervalo
@@ -143,8 +139,7 @@ Endpoint: GET \`/v2/vehicles/{vin}/driving-data/{intervalType}\`
 # Phase 3: Charging History
 gh issue create --repo "$REPO" \
   --title "feat: Charging history (home and public)" \
-  --body "## Phase 3 — Charging History (API confirmada por APK)
-
+  --body "## Phase 3 — Charging History
 Endpoints:
 - GET \`charging_history/home\`
 - GET \`charging_history/public\`
@@ -154,8 +149,7 @@ Sensor con última sesión + atributos (kWh, duración, ubicación) o event enti
 # Phase 3: Speed Alert CRUD
 gh issue create --repo "$REPO" \
   --title "feat: Speed alert management (CRUD)" \
-  --body "## Phase 3 — Speed Alert CRUD (API confirmada por APK)
-
+  --body "## Phase 3 — Speed Alert CRUD
 Endpoints: GET/POST/PUT/DELETE \`v1/vehicles/{vin}/alerts/configuration/speed[/{id}]\`
 
 Servicios HA: \`create_speed_alert\`, \`update_speed_alert\`, \`delete_speed_alert\`
@@ -164,8 +158,7 @@ Sensor: alertas de velocidad activas + atributos"
 # Phase 3: Geofence CRUD
 gh issue create --repo "$REPO" \
   --title "feat: Geofence management (CRUD)" \
-  --body "## Phase 3 — Geofence CRUD (API confirmada por APK)
-
+  --body "## Phase 3 — Geofence CRUD
 Endpoints: GET/POST/PUT/DELETE \`v1/vehicles/{vin}/alerts/configuration/area[/{id}]\`
 
 Servicios HA: \`create_geofence\`, \`update_geofence\`, \`delete_geofence\`
@@ -174,16 +167,14 @@ Sensor: geofences activos + atributos"
 # Phase 3: Vehicle Specifications
 gh issue create --repo "$REPO" \
   --title "feat: Vehicle specifications as device attributes" \
-  --body "## Phase 3 — Vehicle Specifications (API confirmada por APK)
-
+  --body "## Phase 3 — Vehicle Specifications
 Endpoint: GET \`/v2/vehicles/{vin}/specifications\`
 Poblar device_info con: model, year, engine type, color, equipment"
 
 # Phase 3: Transaction History
 gh issue create --repo "$REPO" \
   --title "feat: Transaction history (event entities)" \
-  --body "## Phase 3 — Transaction History (API confirmada por APK)
-
+  --body "## Phase 3 — Transaction History
 Historial de eventos: lock/unlock, honk, geofence triggers, speed alerts, valet.
 Event entities o sensores con últimos eventos.
 10 capabilities de historial identificadas en la app."
